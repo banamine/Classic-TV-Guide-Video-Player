@@ -1,0 +1,6 @@
+{
+  "name": "Classic TV Guide & Video Player",
+  "description": "An elegant dual-player classic TV guide and on-demand streaming network.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
