@@ -17,6 +17,16 @@
   descent-override: 20%;
 }
 
+/* Fix container viewport collapse - ensure full viewport height */
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
 /* Reserved slots for dynamic banners and top notification overlays */
 .console-right-panel {
   will-change: transform, opacity;
@@ -222,4 +232,3 @@ video.video-active,
 .overlay-fade-transition {
   transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
-
