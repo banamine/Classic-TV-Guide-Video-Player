@@ -1,0 +1,123 @@
+#EXTM3U
+#PLAYLIST:Classic-22-12-2023
+
+#EXTINF:-1 tvg-logo="https://i.imgur.com/7ad6NQ8.png" tvg-name="The Love Boat" group-title="Classic",The Love Boat
+https://service-stitcher.clusters.pluto.tv/v1/stitch/embed/hls/channel/5f7794a788d29000079d2f07/master.m3u8?advertisingId=channel&appName=rokuchannel&appVersion=1.0&bmodel=bm1&channel_id=channel&content=channel&content_rating=ROKU_ADS_CONTENT_RATING&content_type=livefeed&coppa=false&deviceDNT=1&deviceId=channel&deviceMake=rokuChannel&deviceModel=web&deviceType=rokuChannel&deviceVersion=1.0&embedPartner=rokuChannel&genre=ROKU_ADS_CONTENT_GENRE&is_lat=1&platform=web&rdid=channel&studio_id=viacom&tags=ROKU_CONTENT_TAGS
+#EXTINF:-1 tvg-logo="https://i.imgur.com/hV46zMX.png" tvg-name="Folk TV" group-title="Classic",Folk TV
+http://584b0aa350b92.streamlock.net:1935/folk-tv/myStream.sdp/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/TCM_2021.svg/512px-TCM_2021.svg.png" tvg-name="TCM West" group-title="Classic, Movies",TCM West
+https://turnerlive.warnermediacdn.com/hls/live/2023187/tcmwest/noslate/VIDEO_1_5128000.m3u8
+#EXTINF:-1 tvg-logo="https://kabeloperatori.neplpadome.lv/lv/assets/images/Programmu%20logo/Picture1111123.png" tvg-name="Movify Kino" group-title="Movies, Classic",Movify Kino
+https://void.greenhosting.ru/MovifyKino_Mpeg4/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/9uzmRTP.png" tvg-name="The Tim Conway Show" group-title="Classic",The Tim Conway Show
+https://dai.google.com/linear/hls/event/v51OvZmXQOizl-KOgpXw1Q/master.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/wg5I5Fb.png" tvg-name="Classic TV Comedy" group-title="Classic",Classic TV Comedy
+https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5f15e32b297f96000768f928/master.m3u8?advertisingId=&appName=web&appStoreUrl=&appVersion=DNT&app_name=&architecture=&buildVersion=&deviceDNT=0&deviceId=5f15e32b297f96000768f928&deviceLat=&deviceLon=&deviceMake=web&deviceModel=web&deviceType=web&deviceVersion=DNT&includeExtendedEvents=false&marketingRegion=US&serverSideAds=false&sid=501&terminate=false&userId=
+#EXTINF:-1 tvg-logo="https://i.imgur.com/JlFwnDD.png" tvg-name="TVS Tally Ho" group-title="Classic",TVS Tally Ho
+https://rpn1.bozztv.com/36bay2/gusa-tvstallyho/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/pMMUvkt.png" tvg-name="Rotana Classic" group-title="Classic",Rotana Classic
+https://daiconnect.com/live/hls/rotana/classical/.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/CC1MFt6.png" tvg-name="Cadena Cover's Clasicos" group-title="Music, Classic",Cadena Cover's Clasicos
+https://bamus-spa-roku.amagi.tv/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/5vtPBfj.png" tvg-name="Doctor Who Classic" group-title="Classic",Doctor Who Classic
+https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5ce4475cd43850831ca91ce7/master.m3u8?advertisingId=&appName=web&appStoreUrl=&appVersion=DNT&app_name=&architecture=&buildVersion=&deviceDNT=0&deviceId=5ce4475cd43850831ca91ce7&deviceLat=&deviceLon=&deviceMake=web&deviceModel=web&deviceType=web&deviceVersion=DNT&includeExtendedEvents=false&marketingRegion=US&serverSideAds=false&sid=532&terminate=false&userId=
+#EXTINF:-1 tvg-logo="https://i.imgur.com/dwr98qb.png" tvg-name="TVS Western Movie" group-title="Classic",TVS Western Movie
+https://rpn1.bozztv.com/36bay2/gusa-tvswesternmovies/index.m3u8
+#EXTINF:-1 tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/TCM_2021.svg/512px-TCM_2021.svg.png" tvg-name="TCM East" group-title="Classic, Movies",TCM East
+https://turnerlive.warnermediacdn.com/hls/live/2023186/tcmeast/noslate/VIDEO_1_5128000.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/JJTQq81.png" tvg-name="BRIDGE Classic" group-title="Classic, Music",BRIDGE Classic
+https://strm.yandex.ru/kal/bridgetvclassic/bridgetvclassic0.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/ejBa7n3.png" tvg-name="Xtrema Retro Series" group-title="Series, Classic",Xtrema Retro Series
+https://stmv1.cnarlatam.com/xtremaretroseries/xtremaretroseries/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/st1xMsw.png" tvg-name="TVS Classic Movies" group-title="Classic",TVS Classic Movies
+https://rpn1.bozztv.com/36bay2/gusa-tvsclassicmovies/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/1a03FlX.png" tvg-name="The Carol Burnett Show" group-title="Classic",The Carol Burnett Show
+https://amg00163-shoutfactory-carolburnett-dmr-cpk9r.amagi.tv/playlist/amg00163-shoutfactory-carolburnett-dmr/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://od.lk/s/MF8yMjg0MDgzNDBf/TheArchive_300x300.png" tvg-name="The Archive" group-title="Classic",The Archive
+https://ov.ottera.tv/live/master.m3u8?channel=mcom_ta_us
+#EXTINF:-1 tvg-logo="https://i.imgur.com/M6FFkc3.png" tvg-name="Classic Arts Showcase" group-title="Classic",Classic Arts Showcase
+https://classicarts.akamaized.net/hls/live/1024257/CAS/master.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/1YHIbZB.png" tvg-name="TVS Front Page Detective" group-title="Classic",TVS Front Page Detective
+https://rpn1.bozztv.com/36bay2/gusa-tvsfrontpagedetective/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/M40b4YI.png" tvg-name="RetroCrush" group-title="Classic, Animation",RetroCrush
+https://cdn-uw2-prod.tsv2.amagi.tv/linear/amg01201-cinedigmenterta-retrocrush-lgus/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/N9nQpnP.png" tvg-name="TVS Mainstreet" group-title="Classic",TVS Mainstreet
+https://rpn1.bozztv.com/36bay2/gusa-tvsmainst/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/QtQGyMS.png" tvg-name="TVS Hollywood History" group-title="Classic",TVS Hollywood History
+https://rpn1.bozztv.com/36bay2/gusa-tvshollywoohistory/mono.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/ugPo6ca.png" tvg-name="Bollywood Classic" group-title="Movies, Classic",Bollywood Classic
+https://shls-live-ak.akamaized.net/out/v1/485100a2150e4f69a338a5c99ca5648e/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/AKa1X9d.png" tvg-name="Thikrayat TV" group-title="Classic",Thikrayat TV
+https://edge.taghtia.com/sa/3.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/60ylWbQ.png" tvg-name="Xtrema Retro Cartoons" group-title="Animation, Kids, Classic",Xtrema Retro Cartoons
+https://stmv1.cnarlatam.com/retroinfantil/retroinfantil/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/ndNXGbD.png" tvg-name="Honor TV" group-title="Classic",Honor TV
+https://a.jsrdn.com/broadcast/d5b48/+0000/c.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/YBdBc0J.png" tvg-name="Nostalgia" group-title="Classic",Nostalgia
+https://tbs01-edge11.itdc.ge/nostalgy/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/IRhW5Lz.png" tvg-name="Chicken Soup for the Soul" group-title="Classic",Chicken Soup for the Soul
+https://dai.google.com/linear/hls/event/2C5P0JGUSj65s8KpeyIDcQ/master.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/QqQL7ss.png" tvg-name="247 Retro" group-title="Classic",247 Retro
+http://hlsdpi-cdn-chqtx02.totalstream.net/dpilive/247retro/ret/dai/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/YfQEflM.png" tvg-name="Pro100TV" group-title="Movies, Entertainment, Family, Classic, Animation",Pro100TV
+https://sirius.greenhosting.ru/Pro100tvRu/video.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/OV9hT93.png" tvg-name="Beverly Hillbillies" group-title="Classic",Beverly Hillbillies
+https://service-stitcher.clusters.pluto.tv/v1/stitch/embed/hls/channel/5db81695a95186000941ee8b/master.m3u8?advertisingId=channel&appName=rokuchannel&appVersion=1.0&bmodel=bm1&channel_id=channel&content=channel&content_rating=ROKU_ADS_CONTENT_RATING&content_type=livefeed&coppa=false&deviceDNT=1&deviceId=channel&deviceMake=rokuChannel&deviceModel=web&deviceType=rokuChannel&deviceVersion=1.0&embedPartner=rokuChannel&genre=ROKU_ADS_CONTENT_GENRE&is_lat=1&platform=web&rdid=channel&studio_id=viacom&tags=ROKU_CONTENT_TAGS
+#EXTINF:-1 tvg-logo="https://od.lk/s/MF8yMzMxMzM1NzJf/LoneStar_250x250.png" tvg-name="Lone Star" group-title="Classic",Lone Star
+https://lonestar-rakuten.amagi.tv/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/vaSXaFp.png" tvg-name="Wanted: Dead or Alive" group-title="Classic",Wanted: Dead or Alive
+https://lnc-wanted-dead-or-alive.tubi.video/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/5Q5qMzP.png" tvg-name="Dubai Zaman" group-title="Classic",Dubai Zaman
+https://dmiffthvll.cdn.mangomolo.com/dubaizaman/smil:dubaizaman.stream.smil/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/iUTL0pm.png" tvg-name="Retro TV East" group-title="Classic",Retro TV East
+https://59514edd5dd8e.streamlock.net/lax/lax/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/q72FCCQ.png" tvg-name="TVS Nostalgia" group-title="Classic",TVS Nostalgia
+https://rpn1.bozztv.com/36bay2/gusa-nostalgia/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/KBTqpJ7.png" tvg-name="Johnny Carson TV" group-title="Classic",Johnny Carson TV
+https://johnnycarson-zype.amagi.tv/playlistR432p.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/pXOyNEy.png" tvg-name="TVS Inspirational Network" group-title="Classic",TVS Inspirational Network
+https://rpn1.bozztv.com/36bay2/gusa-TVSInspirationalNetwork/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/XC30JAF.png" tvg-name="Samuel Goldwyn Classics" group-title="Classic",Samuel Goldwyn Classics
+https://lnc-samuel-goldwyn-classics.tubi.video/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/n0LAunC.png" tvg-name="TVS Horror Network" group-title="Classic",TVS Horror Network
+https://rpn1.bozztv.com/36bay2/gusa-tvshorror/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/pQJxov2.png" tvg-name="Classic Movies Channel" group-title="Classic",Classic Movies Channel
+https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/561c5b0dada51f8004c4d855/master.m3u8?advertisingId=&appName=web&appStoreUrl=&appVersion=DNT&app_name=&architecture=&buildVersion=&deviceDNT=0&deviceId=561c5b0dada51f8004c4d855&deviceLat=&deviceLon=&deviceMake=web&deviceModel=web&deviceType=web&deviceVersion=DNT&includeExtendedEvents=false&marketingRegion=US&serverSideAds=false&sid=106&terminate=false&userId=
+#EXTINF:-1 tvg-logo="https://i.imgur.com/oGE1MOP.png" tvg-name="TVS Pet Parade Network" group-title="Classic",TVS Pet Parade Network
+https://rpn1.bozztv.com/36bay2/gusa-petparadenetwork/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/FJoPnTb.png" tvg-name="Classic Cinema" group-title="Classic",Classic Cinema
+https://rpn1.bozztv.com/36bay2/gusa-classiccinema/mono.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/5ljQwx2.png" tvg-name="TVS Quiz Show Network" group-title="Classic",TVS Quiz Show Network
+https://rpn1.bozztv.com/36bay2/gusa-tvsgameshow/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/25BhuOf.png" tvg-name="GEM Classic" group-title="Classic",GEM Classic
+https://hd.90minlive.online/live/gemclass/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/yyz1S2W.png" tvg-name="TVS Cipher Network" group-title="Classic",TVS Cipher Network
+https://rpn1.bozztv.com/36bay2/gusa-tvsmystery/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/hIlEfhl.png" tvg-name="Retro Cartoon" group-title="Classic",Retro Cartoon
+https://stmv1.srvif.com/retrotv/retrotv/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/SWO9CKA.png" tvg-name="Persiana Nostalgia" group-title="Music, Classic",Persiana Nostalgia
+http://51.210.199.20/hls/stream.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/3qTOYwk.png" tvg-name="Dick Cavett" group-title="Classic",Dick Cavett
+https://dai.google.com/linear/hls/event/-NacIpMDTZ2y1bhkJN96Vg/master.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/jOA4Vtt.png" tvg-name="STIRR Classic TV" group-title="Classic",STIRR Classic TV
+https://dai.google.com/linear/hls/event/8JiQCLfVQw6d7uCYt0qDJg/master.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/8j2npVc.png" tvg-name="FilmRise Classic TV" group-title="Classic",FilmRise Classic TV
+https://dai.google.com/linear/hls/event/hW5jMh7dTRK1UXW5fTH07A/master.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/K1W137J.png" tvg-name="Cinevault Westerns" group-title="Classic",Cinevault Westerns
+https://20995731713c495289784ab260b3c830.mediatailor.us-east-1.amazonaws.com/v1/master/44f73ba4d03e9607dcd9bebdcb8494d86964f1d8/Roku_CinevaultWesterns/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/w4fxiKi.png" tvg-name="TVS Nostalgia Movies" group-title="Classic",TVS Nostalgia Movies
+https://rpn1.bozztv.com/36bay2/gusa-tvsNostalgiaMovies/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/UpgGZJ1.png" tvg-name="Pluto TV Series Retro" group-title="Classic",Pluto TV Series Retro
+https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5de802659167b10009e7deba/master.m3u8?advertisingId=&appName=web&appVersion=5.14.0-0f5ca04c21649b8c8aad4e56266a23b96d73b83a&app_name=web&clientDeviceType=0&clientID=6fbead95-26b1-415d-998f-1bdef62d10be&clientModelNumber=na&deviceDNT=false&deviceId=6fbead95-26b1-415d-998f-1bdef62d10be&deviceLat=19.4358&deviceLon=-99.1441&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=88.0.4324.150&marketingRegion=VE&serverSideAds=false&sessionID=b8e5a857-714a-11eb-b532-0242ac110002&sid=b8e5a857-714a-11eb-b532-0242ac110002&userId=
+#EXTINF:-1 tvg-logo="https://i.imgur.com/XHQxv0x.png" tvg-name="Classic TV Drama" group-title="Classic",Classic TV Drama
+https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5f15e3cccf49290007053c67/master.m3u8?advertisingId=&appName=web&appStoreUrl=&appVersion=DNT&app_name=&architecture=&buildVersion=&deviceDNT=0&deviceId=5f15e3cccf49290007053c67&deviceLat=&deviceLon=&deviceMake=web&deviceModel=web&deviceType=web&deviceVersion=DNT&includeExtendedEvents=false&marketingRegion=US&serverSideAds=false&sid=520&terminate=false&userId=
+#EXTINF:-1 tvg-logo="https://i.imgur.com/9LEiQPJ.png" tvg-name="TVN3" group-title="Classic",TVN3
+https://mdstrm.com/live-stream-playlist/5653641561b4eba30a7e4929.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/jdnHci0.png" tvg-name="TVS Retro" group-title="Classic",TVS Retro
+https://cdn.streamhispanatv.net:3531/live/tvsretrogtlive.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/WsaVAhx.png" tvg-name="TVS Talk Network" group-title="Classic",TVS Talk Network
+https://rpn.bozztv.com/36bay2/gusa-TVStalk/index.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/S2zlGZK.png" tvg-name="WTLH-DT1" group-title="Classic",WTLH-DT1
+https://5e6cea03e25b6.streamlock.net/live/HI.stream/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://i.imgur.com/3GTIs4j.png" tvg-name="TVS Tavern" group-title="Classic",TVS Tavern
+https://rpn1.bozztv.com/36bay2/gusa-tavern/index.m3u8

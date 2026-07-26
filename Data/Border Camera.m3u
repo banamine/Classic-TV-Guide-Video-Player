@@ -1,0 +1,23 @@
+#EXTM3U
+#PLAYLIST:Border Camera
+
+#EXTINF:7,stream.m3u8
+https://s63.ipcamlive.com/streams/3fjoz3pa9ilwk8hbv/stream.m3u8
+#EXTINF:4,stream.m3u8
+https://s75.ipcamlive.com/streams/4bkbuntirqthxfwh0/stream.m3u8
+#EXTINF:10,stream.m3u8
+https://s54.ipcamlive.com/streams/36pbcjxvrqzaszlwe/stream.m3u8
+#EXTINF:10,stream.m3u8
+https://s33.ipcamlive.com/streams/21aofpe5uqyvcrd6v/stream.m3u8
+#EXTINF:4,BridgeZaragoza2.m3u8
+https://zoocams.elpasozoo.org/BridgeZaragoza2.m3u8
+#EXTINF:8,BridgeStanton1.m3u8
+https://zoocams.elpasozoo.org/BridgeStanton1.m3u8
+#EXTINF:4,BridgeStanton3.m3u8
+https://zoocams.elpasozoo.org/BridgeStanton3.m3u8
+#EXTINF:12,chunklist_w1568540437.m3u8?public=Ikn5HADXFr
+https://stream-us1-bravo.dropcam.com/nexus_aac/d75c226bfc434f7280442d3a19763d7d/chunklist_w1568540437.m3u8?public=Ikn5HADXFr
+#EXTINF:37473,Ac5-j.caa.rec.mp4?u=0&b=0
+https://sp.rmbl.ws/s8/2/A/c/5/-/Ac5-j.caa.rec.mp4?u=0&b=0
+#EXTINF:4851,Gunfighters Of The Old West - Gunfighters Of The Old West - https://archive.org/details/gunfighters-of-the-old-west
+https://archive.org/download/gunfighters-of-the-old-west/Gunfighters_of_the_old_West.ia.mp4

@@ -1,0 +1,11 @@
+#EXTM3U
+#PLAYLIST:donner pass
+
+#EXTINF:-1,80 Donner Lake Rd Jeo Nev80 Wb Stream / Playlist
+https://wzmedia.dot.ca.gov/D3/80_Donner_Lake_Rd_JEO_NEV80_WB.stream/playlist.m3u8
+#EXTINF:-1,80 Soda Springs Nev80 Eb Stream / Playlist
+https://wzmedia.dot.ca.gov/D3/80_Soda_Springs_NEV80_EB.stream/playlist.m3u8
+#EXTINF:-1,80 Kingvale Pla80 Eb Stream / Playlist
+https://wzmedia.dot.ca.gov/D3/80_Kingvale_PLA80_EB.stream/playlist.m3u8
+#EXTINF:-1,50 Meyers Ed50 Wb Stream / Playlist
+https://wzmedia.dot.ca.gov/D3/50_Meyers_ED50_WB.stream/playlist.m3u8

@@ -1,0 +1,77 @@
+#EXTM3U
+#PLAYLIST:First Live IPTV
+
+#EXTINF:0,Канал 1
+https://2-fss-2.streamhoster.com/pl_118/204972-1954132-1/playlist.m3u8
+#EXTINF:0,Канал 2
+https://cdn-uw2-prod.tsv2.amagi.tv/linear/amg01201-cinedigmenterta-lonestar-cineverse/playlist.m3u8
+#EXTINF:0,Канал 3
+http://143.244.60.30/TCM/index.m3u8
+#EXTINF:0,Канал 4
+https://turnerlive.warnermediacdn.com/hls/live/2023187/tcmwest/noslate/VIDEO_1_5128000.m3u8
+#EXTINF:0,Канал 5
+https://2-fss-1.streamhoster.com/pl_122/201748-1431018-1/playlist.m3u8
+#EXTINF:0,Канал 6
+https://lnc-nhra.tubi.video/nh.m3u8
+#EXTINF:0,Канал 7
+https://lawcrime.s.llnwi.net/h72/lawcrimech2/playlist_scte.m3u8
+#EXTINF:0,Канал 8
+https://freespeech.akamaized.net/hls/live/2016712/live1/playlist.m3u8
+#EXTINF:0,Канал 9
+https://iheart-iheart80s-1-us.roku.wurl.tv/playlist.m3u8
+#EXTINF:0,Канал 10
+https://iheart-iheart90s-1-us.roku.wurl.tv/playlist.m3u8
+#EXTINF:0,Канал 11
+https://1111296894.rsc.cdn77.org/LS-ATL-56868-1/index.m3u8
+#EXTINF:0,Канал 12
+https://cdn-apse1-prod.tsv2.amagi.tv/linear/amg01076-lightningintern-gbnewsnz-samsungnz/playlist.m3u8
+#EXTINF:0,Канал 13
+https://d35j504z0x2vu2.cloudfront.net/v1/manifest/0bc8e8376bd8417a1b6761138aa41c26c7309312/fuel-tv/606c2f67-acff-4152-975a-e5bfef54eb61/2.m3u8
+#EXTINF:0,Канал 14
+https://lnc-fubo.tubi.video/master.m3u8
+#EXTINF:0,Канал 15
+https://fox-foxnewsnow-samsungus.amagi.tv/playlist.m3u8
+#EXTINF:0,Канал 16
+http://247preview.foxnews.com/hls/live/2020027/fncv3preview/primary.m3u8
+#EXTINF:0,Канал 17
+http://41.205.93.154/FOXBUSINESS/index.m3u8
+#EXTINF:0,Канал 18
+https://dai2.xumo.com/amagi_hls_data_xumo1212A-redboxfilmriseclassictv/CDN/playlist.m3u8
+#EXTINF:0,Канал 19
+https://lnc-forensic-files.tubi.video/index.m3u8
+#EXTINF:0,Канал 20
+https://lnc-filmrise-true-crime.tubi.video/index.m3u8
+#EXTINF:0,Канал 21
+https://lnc-filmrise-western.tubi.video/playlist.m3u8
+#EXTINF:0,Канал 22
+https://lnc-wanted-dead-or-alive.tubi.video/playlist.m3u8
+#EXTINF:0,Канал 23
+http://stream01.vnet.am/Fightbox/mono.m3u8
+#EXTINF:0,Канал 24
+https://edge02.odtv.az/o4/extremesport/playlist.m3u8
+#EXTINF:0,Канал 25
+https://turnerlive.warnermediacdn.com/hls/live/2023178/truwest/slate/VIDEO_0_3564000.m3u8
+#EXTINF:0,Канал 26
+https://lnc-waypoint.tubi.video/playlist.m3u8
+#EXTINF:0,Канал 27
+https://service-stitcher.clusters.pluto.tv/v1/stitch/embed/hls/channel/60d356a534f63f000850cdd7/master.m3u8?advertisingId=channel&appName=rokuchannel&appVersion=1.0&bmodel=bm1&channel_id=channel&content=channel&content_rating=ROKU_ADS_CONTENT_RATING&content_type=livefeed&coppa=false&deviceDNT=1&deviceId=channel&deviceMake=rokuChannel&deviceModel=web&deviceType=rokuChannel&deviceVersion=1.0&embedPartner=rokuChannel&genre=ROKU_ADS_CONTENT_GENRE&is_lat=1&platform=web&rdid=channel&serverSideAds=false&studio_id=viacom&tags=ROKU_CONTENT_TAGS
+#EXTINF:0,Канал 28
+https://rt-rtd.rttv.com/dvr/rtdoc/playlist.m3u8
+#EXTINF:0,Канал 29
+https://origin3.afxp.telemedia.co.za/PremiumFree/rpm/playlist.m3u8
+#EXTINF:0,Канал 30
+https://cdn.igocast.com/channel7_hls/channel7_master.m3u8
+#EXTINF:0,Канал 31
+https://uni01rtmp.tulix.tv/kqsltv/kqsltv/playlist.m3u8
+#EXTINF:0,Канал 32
+https://hls-live-media.cdn01.net/dvr/stream_37099_1.m3u8
+#EXTINF:0,Канал 33
+https://content.uplynk.com/channel/6c0bd0f94b1d4526a98676e9699a10ef.m3u8
+#EXTINF:0,Канал 34
+https://30a-tv.com/darcizzle.m3u8
+#EXTINF:0,Канал 35
+https://3awlive.akamaized.net/hls/live/2032295/3AW/index.m3u8
+#EXTINF:0,Канал 36
+https://lnc-caught-in-providence.tubi.video/playlist.m3u8
+#EXTINF:0,Канал 37
+https://live2.tensila.com/pearl-v-1.pearlfm/hls/live/mystream.m3u8

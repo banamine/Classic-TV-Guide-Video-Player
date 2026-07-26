@@ -1,0 +1,5 @@
+#EXTM3U
+#PLAYLIST:sputnikinfowars
+
+#EXTINF:0,https://icecast-rian.cdnvideo.ru/voiceusa
+http://streams1.infowars.com/infowarslive-mp3?type=http&nocache=4730

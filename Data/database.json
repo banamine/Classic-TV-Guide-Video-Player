@@ -1,0 +1,36 @@
+{
+  "channels": [],
+  "scraperStatus": {
+    "isRunning": false,
+    "progress": 45,
+    "lastRun": null,
+    "currentTask": "Querying Archive.org for old/retro news streams...",
+    "status": "scraping"
+  },
+  "scraperSettings": {
+    "intervalHours": 24,
+    "autoEnrich": true
+  },
+  "scraperLogs": [
+    "[05:17:21] Starting scheduled daily TV guide scraper...",
+    "[05:17:22] Rotated stealth User-Agent: \"Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1\"",
+    "[05:17:22] Emulating viewport dimensions: 1920x1080",
+    "[05:17:22] Simulating browser delay to bypass cloud scrapers: 1122ms",
+    "[05:17:23] Parsing guide feeds from endpoints: https://archive.org/download/daily-highlights/BIG%20WESTERN%20ZONE.m3u, https://archive.org/download/daily-highlights/TV%20CRIME_cleaned.m3u",
+    "[05:17:24] Scraping high-fidelity retro newsreels from Archive.org Advanced Search API (Round-Robin Search Rotation)...",
+    "[05:17:25] Archive.org query [\"old new retro mediatype:movies\"] returned 20 candidate retro news items.",
+    "[05:17:26] Archive.org query [\"old news retro mediatype:movies\"] returned 20 candidate retro news items.",
+    "[05:17:28] Archive.org query [\"universal newsreel mediatype:movies\"] returned 20 candidate retro news items.",
+    "[05:17:29] Archive.org query [\"collection:universal_newsreels\"] returned 20 candidate retro news items.",
+    "[05:17:30] Archive.org query [\"retro newsreel mediatype:movies\"] returned 9 candidate retro news items.",
+    "[05:17:32] Archive.org query [\"vintage newsreel mediatype:movies\"] returned 20 candidate retro news items."
+  ],
+  "complianceLogs": [
+    {
+      "timestamp": "2026-07-26T12:17:21.549Z",
+      "action": "RUN_SCRAPER",
+      "details": "Initiated background TV News and EPG metadata sync."
+    }
+  ],
+  "telemetryLogs": []
+}
