@@ -1,40 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Classic TV Guide & Video Player - Cinema Live Player</title>
-
-  <!-- Preconnect for performance -->
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- HLS.js Library -->
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.0/dist/hls.min.js"></script>
-
-  <style>
-    .crt-overlay {
-      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.3) 50%);
-      background-size: 100% 4px;
-      pointer-events: none;
-    }
-    .active-channel-card {
-      border-color: #22c55e !important;
-      box-shadow: 0 0 15px rgba(34, 197, 94, 0.3);
-    }
-  </style>
-</head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-emerald-500 selection:text-slate-950">
-
-  <!-- Root mount point for React app -->
-  <div id="root"></div>
-
-  <!-- React app entry point via main.tsx -->
-  <script type="module" src="/src/main.tsx"></script>
-
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Classic TV Guide & Video Player</title>
+  </head>
+  <body class="bg-black text-white m-0 p-0 overflow-hidden">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
