@@ -1,3 +1,4 @@
+@'
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -7,6 +8,11 @@
   </head>
   <body class="bg-black text-white m-0 p-0 overflow-hidden">
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="./src/main.tsx"></script>
   </body>
 </html>
+'@ | Set-Content -Path "index.html" -Encoding UTF8
+
+git add index.html
+git commit -m "fix: update script src to relative path"
+git push origin main
