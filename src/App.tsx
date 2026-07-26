@@ -3,17 +3,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, startTransition } from 'react';
 import { CHANNELS_DATA } from './data/playlist';
 import { Channel, Episode, Show, PlaybackLog } from './types';
 import { getLiveEpisodeForChannel } from './utils/scheduler';
 import { CustomVideoPlayer } from './components/CustomVideoPlayer';
 import { EPGGuide } from './components/EPGGuide';
+import { StationDirectory } from './components/StationDirectory';
+import { CinemaEPGGuide } from './components/CinemaEPGGuide';
 import { DiagnosticConsole } from './components/DiagnosticConsole';
+import { ScraperDashboard } from './components/ScraperDashboard';
+import { CommercialFillModal } from './components/CommercialFillModal';
 import { parseM3U, exportM3U, exportCSV } from './utils/m3uParser';
+import { parseMasterPlaylistJSON } from './utils/broadcastEngine';
 import { generateStaticPlayerHtml } from './utils/staticPlayerGenerator';
 import {
   Radio,
+  Tv,
   Calendar,
   Info,
   Terminal,
@@ -51,7 +57,9 @@ import {
   PlayCircle,
   Code,
   Cpu,
-  RefreshCw
+  RefreshCw,
+  Star,
+  StarOff
 } from 'lucide-react';
 
 export default function App() {
@@ -116,26 +124,52 @@ export default function App() {
     }
     return initialChannels;
   });
-  const [selectedChannel, setSelectedChannel] = useState<Channel>(CHANNELS_DATA[0]);
-  const [selectedShow, setSelectedShow] = useState<Show>(CHANNELS_DATA[0].shows[0]);
-  const [selectedEpisode, setSelectedEpisode] = useState<Episode>(CHANNELS_DATA[0].shows[0].episodes[0]);
+  const [selectedChannel, setSelectedChannel] = useState<Channel>(() => {
+    return CHANNELS_DATA[0] || {} as Channel;
+  });
+  const [selectedShow, setSelectedShow] = useState<Show>(() => {
+    return CHANNELS_DATA[0]?.shows?.[0] || {} as Show;
+  });
+  const [selectedEpisode, setSelectedEpisode] = useState<Episode>(() => {
+    return CHANNELS_DATA[0]?.shows?.[0]?.episodes?.[0] || {} as Episode;
+  });
+
+  // Startup lazy-init check: Verifies if selectedChannel (representing activeChannel) is set on startup or becomes undefined.
+  // If undefined or empty, default it to the first channel in CHANNELS_DATA array to prevent early-exit failures in the broadcast engine.
+  useEffect(() => {
+    if ((!selectedChannel || !selectedChannel.id) && CHANNELS_DATA && CHANNELS_DATA.length > 0 && CHANNELS_DATA[0]?.id) {
+      const defaultChannel = CHANNELS_DATA[0];
+      if (selectedChannel !== defaultChannel) {
+        console.log("⚡ [Lazy-Init]: Active channel undefined, missing, or invalid. Resetting to first channel in CHANNELS_DATA.");
+        setSelectedChannel(defaultChannel);
+        if (defaultChannel.shows && defaultChannel.shows.length > 0) {
+          setSelectedShow(defaultChannel.shows[0]);
+          if (defaultChannel.shows[0].episodes && defaultChannel.shows[0].episodes.length > 0) {
+            setSelectedEpisode(defaultChannel.shows[0].episodes[0]);
+          }
+        }
+      }
+    }
+  }, [selectedChannel?.id]);
 
   // Loaded playlists source registry
   const [loadedFiles, setLoadedFiles] = useState<string[]>(['Classic_Retro_TV_Defaults.m3u']);
 
   // Playback modes
   const [isLiveMode, setIsLiveMode] = useState<boolean>(true);
+  const [schedulingMode, setSchedulingMode] = useState<'hard-clocked' | 'continuous'>('hard-clocked');
   const [currentTimeMs, setCurrentTimeMs] = useState<number>(Date.now());
   const [liveSeekOffset, setLiveSeekOffset] = useState<number>(0);
+  const [clockOffsetMs, setClockOffsetMs] = useState<number>(0);
 
   // Diagnostic Logs array
   const [logs, setLogs] = useState<PlaybackLog[]>([]);
 
   // Search & Filter controls
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [regexSearchError, setRegexSearchError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>('All');
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState<boolean>(false);
 
   // Inline Cell Editing states
   const [editingChannelId, setEditingChannelId] = useState<string | null>(null);
@@ -143,11 +177,31 @@ export default function App() {
   const [editingValue, setEditingValue] = useState<string>('');
 
   // Primary workspace tabs
-  const [workspaceTab, setWorkspaceTab] = useState<'matrix' | 'epg' | 'github'>('matrix');
+  const [workspaceTab, setWorkspaceTab] = useState<'matrix' | 'epg' | 'export' | 'scraper'>('matrix');
 
   // GitHub integration state variables
-  const [githubRepo, setGithubRepo] = useState<string>(() => localStorage.getItem('m3u_pro_github_repo') || 'banamine/Nexus-TV-O');
+  const [githubRepo, setGithubRepo] = useState<string>(() => {
+    const cached = localStorage.getItem('m3u_pro_github_repo');
+    if (cached) return cached;
+    try {
+      if (typeof window !== 'undefined' && window.location.hostname.endsWith('.github.io')) {
+        const parts = window.location.hostname.split('.');
+        const owner = parts[0];
+        const pathSegments = window.location.pathname.split('/').filter(Boolean);
+        if (pathSegments.length > 0) {
+          return `${owner}/${pathSegments[0]}`;
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return 'banamine/Nexus-TV-O';
+  });
   const [githubBranch, setGithubBranch] = useState<string>(() => localStorage.getItem('m3u_pro_github_branch') || 'main');
+  const [isCustomBranch, setIsCustomBranch] = useState<boolean>(() => {
+    const saved = localStorage.getItem('m3u_pro_github_branch') || 'main';
+    return !['main', 'dev', 'staging'].includes(saved);
+  });
   const [githubToken, setGithubToken] = useState<string>(() => localStorage.getItem('m3u_pro_github_token') || '');
   const [githubStatus, setGithubStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [githubFiles, setGithubFiles] = useState<any[]>([]);
@@ -155,12 +209,19 @@ export default function App() {
   const [isGithubLoading, setIsGithubLoading] = useState<boolean>(false);
   const [githubMessage, setGithubMessage] = useState<string>('');
   const [currentExplorerPath, setCurrentExplorerPath] = useState<string>('');
+  const [yamlCopied, setYamlCopied] = useState<boolean>(false);
   
   // Static Player Preview
   const [staticPlayerPreviewBlobUrl, setStaticPlayerPreviewBlobUrl] = useState<string | null>(null);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState<boolean>(false);
   const [githubM3uSavePath, setGithubM3uSavePath] = useState<string>('playlist.m3u');
   const [githubHtmlSavePath, setGithubHtmlSavePath] = useState<string>('index.html');
+  const [githubEpgSavePath, setGithubEpgSavePath] = useState<string>(() => localStorage.getItem('m3u_pro_github_epg_save_path') || 'epg.json');
+
+  const handleEpgSavePathChange = (val: string) => {
+    setGithubEpgSavePath(val);
+    localStorage.setItem('m3u_pro_github_epg_save_path', val);
+  };
 
   // Row selection and Context clipboard state
   const [selectedRowId, setSelectedRowId] = useState<string | null>(CHANNELS_DATA[0].id);
@@ -175,10 +236,20 @@ export default function App() {
   const [importUrlValue, setImportUrlValue] = useState<string>('');
   const [showFetchEpgModal, setShowFetchEpgModal] = useState<boolean>(false);
   const [fetchEpgValue, setFetchEpgValue] = useState<string>('');
+  
+  // Advanced Auto-Scheduler state configuration variables
+  const [schedulerBlockLayout, setSchedulerBlockLayout] = useState<string>('4'); // 1, 2, 4, 6, 8, 12, 24 hours
+  const [schedulerSelectedGenres, setSchedulerSelectedGenres] = useState<string[]>(['TV Shows', 'Movies', 'Westerns', 'News', 'Crime Shows']);
+  const [schedulerMorningTheme, setSchedulerMorningTheme] = useState<string>('Westerns');
+  const [schedulerAfternoonTheme, setSchedulerAfternoonTheme] = useState<string>('Crime Shows');
+  const [schedulerEveningTheme, setSchedulerEveningTheme] = useState<string>('TV Shows');
+  const [schedulerLateLateTheme, setSchedulerLateLateTheme] = useState<string>('Movies');
+  const [showAutoSchedulerModal, setShowAutoSchedulerModal] = useState<boolean>(false);
   const [showBackupsModal, setShowBackupsModal] = useState<boolean>(false);
   const [backupChannelId, setBackupChannelId] = useState<string | null>(null);
   const [newBackupUrl, setNewBackupUrl] = useState<string>('');
   const [showTvGuideModal, setShowTvGuideModal] = useState<boolean>(false);
+  const [showCommercialModal, setShowCommercialModal] = useState<boolean>(false);
 
   // Custom row context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -190,13 +261,121 @@ export default function App() {
   // File input ref for Load action
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Cinema-First Overlay & Mode States
+  const [isStationDrawerOpen, setIsStationDrawerOpen] = useState<boolean>(false);
+  const [isEPGOverlayVisible, setIsEPGOverlayVisible] = useState<boolean>(false);
+  const [isWorkspaceOpen, setIsWorkspaceOpen] = useState<boolean>(false);
+  const [isHUDVisible, setIsHUDVisible] = useState<boolean>(true);
+  const [videoFit, setVideoFit] = useState<'cover' | 'contain'>('contain');
+
+  const decayTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isHoveringMenuRef = useRef<boolean>(false);
+  const channelSwitchLockRef = useRef<{ id: string; time: number } | null>(null);
+
+  const resetDecayTimer = () => {
+    if (decayTimerRef.current) {
+      clearTimeout(decayTimerRef.current);
+    }
+    setIsHUDVisible(true);
+    
+    // Only schedule decay if not actively hovering any overlay menu
+    if (!isHoveringMenuRef.current) {
+      decayTimerRef.current = setTimeout(() => {
+        // Clean decay: collapse drawers and hide HUD after 5 seconds of inactivity
+        setIsStationDrawerOpen(false);
+        setIsEPGOverlayVisible(false);
+        setIsHUDVisible(false);
+      }, 5000);
+    }
+  };
+
+  const clearDecayTimer = () => {
+    if (decayTimerRef.current) {
+      clearTimeout(decayTimerRef.current);
+    }
+    setIsHUDVisible(true);
+  };
+
+  // Keyboard mapping shortcuts effect (Phase 2, Bullet 3)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip if user is actively writing/editing in input, textarea, or contenteditable cell
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.hasAttribute('contenteditable'))
+      ) {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+
+      if (key === 'm' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setIsStationDrawerOpen((prev) => {
+          const next = !prev;
+          if (next) resetDecayTimer();
+          return next;
+        });
+      } else if (key === 'g' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        setIsEPGOverlayVisible((prev) => {
+          const next = !prev;
+          if (next) resetDecayTimer();
+          return next;
+        });
+      } else if (key === 'a') {
+        e.preventDefault();
+        setVideoFit((prev) => {
+          const next = prev === 'cover' ? 'contain' : 'cover';
+          logMessage('custom', `Aspect Ratio switched to: ${next === 'cover' ? 'FILL SCREEN (COVER)' : 'LETTERBOX (CONTAIN)'}`);
+          return next;
+        });
+      } else if (key === 's' || key === 'w') {
+        e.preventDefault();
+        setIsWorkspaceOpen((prev) => !prev);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (isStationDrawerOpen || isEPGOverlayVisible) {
+          setIsStationDrawerOpen(false);
+          setIsEPGOverlayVisible(false);
+        } else if (isWorkspaceOpen) {
+          setIsWorkspaceOpen(false);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isStationDrawerOpen, isEPGOverlayVisible, isWorkspaceOpen, videoFit]);
+
+  // Track window mouse movement to reset decay timer in viewing mode (Phase 3, Bullet 3)
+  useEffect(() => {
+    if (isWorkspaceOpen) return;
+
+    const handleMouseMove = () => {
+      resetDecayTimer();
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      if (decayTimerRef.current) {
+        clearTimeout(decayTimerRef.current);
+      }
+    };
+  }, [isWorkspaceOpen]);
+
   // Periodically refresh current time to drive virtual broadcast scheduler
   useEffect(() => {
     const timer = setInterval(() => {
-      setCurrentTimeMs(Date.now());
+      setCurrentTimeMs(Date.now() + clockOffsetMs);
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [clockOffsetMs]);
 
   // Set up initial telemetry logs
   useEffect(() => {
@@ -206,27 +385,49 @@ export default function App() {
 
   // Update selection dynamically when scheduling changes or channel updates (in simulated Live mode)
   useEffect(() => {
-    if (isLiveMode && selectedChannel) {
+    if (isLiveMode && selectedChannel && selectedChannel.id) {
       try {
         const live = getLiveEpisodeForChannel(selectedChannel, currentTimeMs);
-        setSelectedShow(live.show);
-        setSelectedEpisode(live.episode);
-        setLiveSeekOffset(live.seekOffsetSeconds);
+        if (live && live.episode) {
+          setSelectedEpisode((prevEp) => {
+            if (!prevEp || prevEp.id !== live.episode.id || prevEp.url !== live.episode.url) {
+              return live.episode;
+            }
+            return prevEp; // Keep reference stable unless episode actually changes
+          });
+          setSelectedShow((prevShow) => {
+            if (!prevShow || prevShow.id !== live.show?.id) {
+              return live.show;
+            }
+            return prevShow;
+          });
+          setLiveSeekOffset((prevOffset) => prevOffset !== live.seekOffsetSeconds ? live.seekOffsetSeconds : prevOffset);
+        }
       } catch (err) {
         // Fallback if channel has custom raw playlist structure with no EPG
         const fallbackShow = selectedChannel.shows?.[0];
         const fallbackEp = fallbackShow?.episodes?.[0];
         if (fallbackShow && fallbackEp) {
-          setSelectedShow(fallbackShow);
-          setSelectedEpisode(fallbackEp);
+          setSelectedEpisode((prevEp) => {
+            if (!prevEp || prevEp.id !== fallbackEp.id || prevEp.url !== fallbackEp.url) {
+              return fallbackEp;
+            }
+            return prevEp;
+          });
+          setSelectedShow((prevShow) => {
+            if (!prevShow || prevShow.id !== fallbackShow.id) {
+              return fallbackShow;
+            }
+            return prevShow;
+          });
           setLiveSeekOffset(0);
         }
       }
     }
-  }, [selectedChannel?.id, isLiveMode, currentTimeMs]);
+  }, [selectedChannel, isLiveMode, currentTimeMs]);
 
   // Log system telemetry events
-  const logMessage = (
+  const logMessage = useCallback((
     type: PlaybackLog['type'],
     message: string,
     meta?: PlaybackLog['meta']
@@ -243,17 +444,111 @@ export default function App() {
       meta,
     };
     setLogs((prev) => [...prev.slice(-99), newLog]);
-  };
+  }, []);
+
+  const handleScraperLogEvent = useCallback((msg: string) => logMessage('custom', msg), [logMessage]);
 
   const handleClearLogs = () => {
     setLogs([]);
     logMessage('custom', 'Console logs cleared.');
   };
 
+  const handleRunChannelHopTest = () => {
+    if (!channels || channels.length === 0) {
+      logMessage('error', '❌ [Channel Hop Test Failure]: No channels available in playlist.');
+      return;
+    }
+
+    logMessage('custom', '🧪 [Channel Hop Test]: Initiating simulated channel hop diagnostic test...');
+
+    // 1. Determine target channel to hop to (pick a different channel if available, or current channel)
+    const currentChannelId = selectedChannel?.id;
+    const targetChannel = channels.find((c) => c.id !== currentChannelId) || channels[0];
+
+    // 2. Simulated broadcast timestamp
+    const simulatedTimestampMs = currentTimeMs;
+    const dateStr = new Date(simulatedTimestampMs).toISOString();
+
+    logMessage('epg', `🧪 [Channel Hop Test]: Hopping from CH ${selectedChannel?.number || '?'} to CH ${targetChannel.number} "${targetChannel.name}" at simulated broadcast time ${dateStr}`);
+
+    // 3. Calculate expected live state using scheduler.ts
+    try {
+      const expectedLive = getLiveEpisodeForChannel(targetChannel, simulatedTimestampMs);
+      logMessage('custom', `🧪 [Scheduler Output]: Expected Show: "${expectedLive.show.title}", Episode: "${expectedLive.episode.title}", Seek Offset: ${expectedLive.seekOffsetSeconds}s, Remaining: ${expectedLive.remainingSeconds}s`);
+
+      // 4. Simulate the channel switch in App.tsx
+      setSelectedChannel(targetChannel);
+      setSelectedShow(expectedLive.show);
+      setSelectedEpisode(expectedLive.episode);
+      setLiveSeekOffset(expectedLive.seekOffsetSeconds);
+
+      // 5. Verify alignment between expected and resulting selection
+      if (
+        expectedLive.episode &&
+        expectedLive.episode.title &&
+        typeof expectedLive.seekOffsetSeconds === 'number' &&
+        expectedLive.seekOffsetSeconds >= 0
+      ) {
+        logMessage('custom', `✅ [Channel Hop Test PASSED]: selectedEpisode ("${expectedLive.episode.title}") & liveSeekOffset (${expectedLive.seekOffsetSeconds}s) correctly aligned with scheduler calculations for CH "${targetChannel.name}".`);
+      } else {
+        logMessage('error', `❌ [Channel Hop Test FAILED]: Mismatch or invalid calculation for CH "${targetChannel.name}".`);
+      }
+    } catch (err: any) {
+      logMessage('error', `❌ [Channel Hop Test ERROR]: Failed to compute scheduler schedule for CH "${targetChannel.name}": ${err.message}`);
+    }
+  };
+
+  const refreshChannels = async () => {
+    try {
+      const res = await fetch('/api/channels');
+      if (res.ok) {
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data && data.length > 0) {
+            setChannels(data);
+            logMessage('custom', `Successfully loaded database playlist with ${data.length} channels.`);
+            
+            // Re-synchronize currently selected channel, show, and episode if needed
+            setSelectedChannel((prev) => {
+              const found = data.find((c: Channel) => c.id === prev?.id);
+              if (found) {
+                return found;
+              }
+              return data[0];
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load channels from database:', err);
+    }
+  };
+
+  const handleDurationProbed = useCallback((durationMs: number) => {
+    setSelectedEpisode((prev) => (prev ? { ...prev, durationMs } : prev));
+    setChannels((prevChannels) =>
+      prevChannels.map((ch) => ({
+        ...ch,
+        shows: ch.shows?.map((s) => ({
+          ...s,
+          episodes: s.episodes?.map((e) =>
+            e.id === selectedEpisode?.id ? { ...e, durationMs } : e
+          ),
+        })),
+      }))
+    );
+  }, [selectedEpisode?.id]);
+
+  useEffect(() => {
+    refreshChannels();
+  }, []);
+
   // Save credentials to localStorage when updated
   const saveGithubCredentials = (repo: string, branch: string, token: string) => {
     setGithubRepo(repo);
     setGithubBranch(branch);
+    setIsCustomBranch(!['main', 'dev', 'staging'].includes(branch));
     setGithubToken(token);
     localStorage.setItem('m3u_pro_github_repo', repo);
     localStorage.setItem('m3u_pro_github_branch', branch);
@@ -323,6 +618,67 @@ export default function App() {
     }
     setIsGithubLoading(true);
     setGithubMessage('');
+    
+    // DIAGNOSTIC CHECK: Find workflow and verify on: workflow_dispatch:
+    logMessage('custom', `🔍 [Diagnostic Check]: Validating workflow #${workflowId} trigger configuration...`);
+    const targetWf = githubWorkflows.find(w => w.id === workflowId || w.id === Number(workflowId) || w.path?.endsWith(String(workflowId)));
+    
+    if (targetWf && targetWf.path) {
+      logMessage('custom', `🔍 [Diagnostic Check]: Fetching workflow file from GitHub: "/${targetWf.path}" on branch "${githubBranch}"...`);
+      try {
+        const checkHeaders: Record<string, string> = {
+          'Accept': 'application/vnd.github.v3.raw',
+          'Authorization': `token ${githubToken}`
+        };
+        let fileRes = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${targetWf.path}?ref=${githubBranch}`, { headers: checkHeaders });
+        
+        let yamlContent = '';
+        if (fileRes.ok) {
+          yamlContent = await fileRes.text();
+        } else {
+          // Fallback to standard JSON content retrieval if raw header has issues
+          const jsonHeaders: Record<string, string> = {
+            'Accept': 'application/vnd.github.v3+json',
+            'Authorization': `token ${githubToken}`
+          };
+          const jsonRes = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${targetWf.path}?ref=${githubBranch}`, { headers: jsonHeaders });
+          if (jsonRes.ok) {
+            const jsonData = await jsonRes.json();
+            if (jsonData.content && jsonData.encoding === 'base64') {
+              yamlContent = atob(jsonData.content.replace(/\s/g, ''));
+            }
+          }
+        }
+
+        if (yamlContent) {
+          // Filter out comments (lines starting with # or spaces then #)
+          const lines = yamlContent.split('\n');
+          const cleanLines = lines
+            .map(line => {
+              const hashIdx = line.indexOf('#');
+              return hashIdx !== -1 ? line.substring(0, hashIdx) : line;
+            })
+            .join('\n');
+
+          const hasWorkflowDispatch = /workflow_dispatch\s*(?::|$|\[|\])/i.test(cleanLines);
+          if (hasWorkflowDispatch) {
+            logMessage('custom', `✅ [Diagnostic Success]: Verified 'workflow_dispatch' trigger is present in "/${targetWf.path}".`);
+          } else {
+            logMessage('error', `❌ [Diagnostic Failure]: 'workflow_dispatch' trigger is MISSING from "/${targetWf.path}"!`);
+            setGithubMessage(`Dispatch aborted: The workflow file "/${targetWf.path}" does not have 'workflow_dispatch' configured. Please add 'on: workflow_dispatch:' to allow remote triggers.`);
+            setIsGithubLoading(false);
+            return; // STOP execution of dispatch to save API overhead and provide guide
+          }
+        } else {
+          logMessage('waiting', `⚠️ [Diagnostic Warning]: Workflow file content is empty or unreadable. Continuing dispatch attempt...`);
+        }
+      } catch (checkErr: any) {
+        logMessage('waiting', `⚠️ [Diagnostic Skipped]: Could not verify workflow triggers: ${checkErr.message}. Attempting dispatch anyway...`);
+      }
+    } else {
+      logMessage('waiting', `⚠️ [Diagnostic Check]: Workflow path not registered in local state. Attempting direct dispatch...`);
+    }
+
     try {
       const headers: Record<string, string> = {
         'Accept': 'application/vnd.github.v3+json',
@@ -344,7 +700,11 @@ export default function App() {
         throw new Error(`Failed with status ${res.status}: ${bodyText}`);
       }
     } catch (err: any) {
-      setGithubMessage(`Dispatch failed: ${err.message}`);
+      if (err.message && (err.message.includes('workflow_dispatch') || err.message.includes('422'))) {
+        setGithubMessage(`Dispatch failed: Failed with status 422: Workflow does not have 'workflow_dispatch' trigger. Please add 'on: [workflow_dispatch]' or 'on: workflow_dispatch' to your GitHub Action YAML workflow file inside your repository.`);
+      } else {
+        setGithubMessage(`Dispatch failed: ${err.message}`);
+      }
       logMessage('error', `GitHub Workflow Trigger Failed: ${err.message}`);
     } finally {
       setIsGithubLoading(false);
@@ -435,6 +795,153 @@ export default function App() {
     }
   };
 
+  const saveEPGToGithub = async (filePath: string) => {
+    if (!githubToken) {
+      setGithubMessage('A GitHub Personal Access Token is required to write back EPG state to the repository.');
+      return;
+    }
+    setIsGithubLoading(true);
+    setGithubMessage('');
+    try {
+      const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'Authorization': `token ${githubToken}`,
+      };
+      
+      let sha: string | undefined;
+      try {
+        const checkRes = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${filePath}?ref=${githubBranch}`, { headers });
+        if (checkRes.ok) {
+          const fileData = await checkRes.json();
+          sha = fileData.sha;
+        }
+      } catch (err) {
+        console.log('EPG File may be new', err);
+      }
+
+      const content = JSON.stringify(channels, null, 2);
+      const encodedContent = btoa(unescape(encodeURIComponent(content)));
+
+      const commitRes = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${filePath}`, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: `Update ${filePath} with EPG Guide state and scheduled programs`,
+          content: encodedContent,
+          branch: githubBranch,
+          sha
+        })
+      });
+
+      if (commitRes.ok) {
+        setGithubMessage(`Successfully committed and updated EPG state at "/${filePath}"!`);
+        logMessage('custom', `✅ [GitHub EPG Save Success]: Saved current EPG state and scheduled programs to /${filePath} on branch "${githubBranch}".`);
+      } else {
+        const errText = await commitRes.text();
+        throw new Error(`EPG save failed (${commitRes.status}): ${errText}`);
+      }
+    } catch (err: any) {
+      setGithubMessage(`EPG save failed: ${err.message}`);
+      logMessage('error', `❌ [GitHub EPG Save Failure]: ${err.message}`);
+    } finally {
+      setIsGithubLoading(false);
+    }
+  };
+
+  const loadEPGFromGithub = async (downloadUrl: string, fileName: string) => {
+    setIsGithubLoading(true);
+    setGithubMessage('');
+    try {
+      const res = await fetch(downloadUrl);
+      if (!res.ok) throw new Error(`Could not download file contents: ${res.statusText}`);
+      const data = await res.json();
+      
+      if (Array.isArray(data) && data.length > 0 && data[0].id && data[0].name) {
+        const saveRes = await fetch('/api/channels', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        
+        if (saveRes.ok) {
+          setChannels(data);
+          setSelectedChannel(data[0]);
+          setSelectedShow(data[0].shows?.[0] || { id: '', title: 'N/A', description: '', year: '', genre: '', episodes: [] });
+          setSelectedEpisode(data[0].shows?.[0]?.episodes?.[0] || { id: '', title: 'N/A', url: '' });
+          setGithubMessage(`Successfully loaded ${data.length} channels from ${fileName}.`);
+          logMessage('custom', `✅ [EPG Load Success]: Imported and saved EPG state from GitHub file: ${fileName}`);
+        } else {
+          const errText = await saveRes.text();
+          throw new Error(`Failed to save EPG to database: ${errText}`);
+        }
+      } else {
+        throw new Error('JSON file is not a valid EPG channels structure.');
+      }
+    } catch (err: any) {
+      setGithubMessage(`EPG load failed: ${err.message}`);
+      logMessage('error', `❌ [EPG Load Failure]: ${err.message}`);
+    } finally {
+      setIsGithubLoading(false);
+    }
+  };
+
+  const fetchAndLoadEpgFromPath = async (filePath: string) => {
+    if (!githubToken) {
+      setGithubMessage('A GitHub Personal Access Token is required to load EPG state.');
+      return;
+    }
+    setIsGithubLoading(true);
+    setGithubMessage('');
+    try {
+      const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'Authorization': `token ${githubToken}`,
+      };
+      
+      const res = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${filePath}?ref=${githubBranch}`, { headers });
+      if (!res.ok) {
+        if (res.status === 404) {
+          throw new Error(`EPG state file "${filePath}" not found in this repository branch.`);
+        }
+        throw new Error(`GitHub API returned ${res.status}: ${res.statusText}`);
+      }
+      
+      const fileData = await res.json();
+      const content = decodeURIComponent(escape(atob(fileData.content.replace(/\s/g, ''))));
+      const data = JSON.parse(content);
+      
+      if (Array.isArray(data) && data.length > 0 && data[0].id && data[0].name) {
+        const saveRes = await fetch('/api/channels', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        
+        if (saveRes.ok) {
+          setChannels(data);
+          setSelectedChannel(data[0]);
+          setSelectedShow(data[0].shows?.[0] || { id: '', title: 'N/A', description: '', year: '', genre: '', episodes: [] });
+          setSelectedEpisode(data[0].shows?.[0]?.episodes?.[0] || { id: '', title: 'N/A', url: '' });
+          setGithubMessage(`Successfully synced and loaded EPG state from "/${filePath}"!`);
+          logMessage('custom', `✅ [EPG Sync Success]: Synchronized local player with remote EPG state from "/${filePath}" (${data.length} channels).`);
+        } else {
+          const errText = await saveRes.text();
+          throw new Error(`Failed to save loaded EPG to database: ${errText}`);
+        }
+      } else {
+        throw new Error('EPG JSON content is invalid or empty.');
+      }
+    } catch (err: any) {
+      setGithubMessage(`EPG Sync Load failed: ${err.message}`);
+      logMessage('error', `❌ [EPG Sync Load Failure]: ${err.message}`);
+    } finally {
+      setIsGithubLoading(false);
+    }
+  };
+
   const publishStaticPlayerToGithub = async (filePath: string) => {
     if (!githubToken) {
       setGithubMessage('A GitHub Personal Access Token is required to publish/commit files to your repository.');
@@ -459,7 +966,7 @@ export default function App() {
         console.log('Static player file may be new', err);
       }
 
-      const playerContent = generateStaticPlayerHtml(channels, `Nexus Auto-Scheduled TV Guide`);
+      const playerContent = generateStaticPlayerHtml(channels, `Classic TV Guide & Video Player`, githubEpgSavePath);
       const encodedContent = btoa(unescape(encodeURIComponent(playerContent)));
 
       const commitRes = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${filePath}`, {
@@ -491,10 +998,52 @@ export default function App() {
     }
   };
 
+  const pushCodebaseToGithub = async () => {
+    if (!githubToken) {
+      setGithubMessage('A GitHub Personal Access Token is required to push the codebase.');
+      return;
+    }
+    if (!githubRepo) {
+      setGithubMessage('Please specify your target GitHub repository (e.g. username/repo).');
+      return;
+    }
+    setIsGithubLoading(true);
+    setGithubMessage('');
+    logMessage('custom', `📤 [Codebase Sync]: Committing and pushing full M3U Pro codebase (sources, configurations, and workflows) to repository "${githubRepo}" on branch "${githubBranch}"...`);
+    try {
+      const response = await fetch('/api/github/push-codebase', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          repo: githubRepo,
+          branch: githubBranch,
+          token: githubToken
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setGithubMessage(data.message || 'Successfully pushed full codebase!');
+        logMessage('custom', `✅ [Codebase Sync Success]: ${data.message || 'All local application source files and custom workflow pipelines have been pushed and mirrored to remote.'}`);
+        // Automatically fetch workflows after pushing codebase, so they can trigger if needed
+        await fetchGithubWorkflows();
+      } else {
+        throw new Error(data.error || 'Backend failed to push codebase.');
+      }
+    } catch (err: any) {
+      setGithubMessage(`Codebase sync failed: ${err.message}`);
+      logMessage('error', `❌ [Codebase Sync Failure]: ${err.message}`);
+    } finally {
+      setIsGithubLoading(false);
+    }
+  };
+
   const handlePreviewStaticPlayer = () => {
     setIsGeneratingPreview(true);
     try {
-      const html = generateStaticPlayerHtml(channels, `Station Live Broadcast Preview`);
+      const html = generateStaticPlayerHtml(channels, `Station Live Broadcast Preview`, githubEpgSavePath);
       const blob = new Blob([html], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
       setStaticPlayerPreviewBlobUrl(url);
@@ -506,12 +1055,207 @@ export default function App() {
     }
   };
 
-  // Safe stream switch handler
+  const getGitHubPagesUrl = () => {
+    if (!githubRepo || !githubRepo.includes('/')) return null;
+    const parts = githubRepo.split('/');
+    const owner = parts[0]?.trim();
+    const repo = parts[1]?.trim();
+    if (!owner || !repo) return null;
+    if (repo.toLowerCase().endsWith('.github.io')) {
+      return `https://${repo.toLowerCase()}/`;
+    }
+    return `https://${owner.toLowerCase()}.github.io/${repo}/`;
+  };
+
+  const quickSyncAndPublishAll = async () => {
+    if (!githubToken) {
+      setGithubMessage('A GitHub Personal Access Token is required to run the automated quick sync.');
+      logMessage('error', '⚡ Quick Sync Aborted: Missing GitHub Personal Access Token (PAT).');
+      return;
+    }
+    setIsGithubLoading(true);
+    setGithubMessage('');
+    logMessage('custom', '⚡ [Quick Sync]: Initiating automated background deployment sequence...');
+
+    try {
+      const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'Authorization': `token ${githubToken}`,
+      };
+
+      // STEP 1: Sync the Playlist File (.m3u)
+      logMessage('custom', `[Quick Sync Step 1/4]: Synchronizing remote M3U playlist reference at "/${githubM3uSavePath}"...`);
+      let m3uSha: string | undefined;
+      try {
+        const m3uCheck = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${githubM3uSavePath}?ref=${githubBranch}`, { headers });
+        if (m3uCheck.ok) {
+          const m3uData = await m3uCheck.json();
+          m3uSha = m3uData.sha;
+          logMessage('custom', `[Quick Sync]: Found existing playlist file SHA: ${m3uSha?.substring(0, 7)}`);
+        } else {
+          logMessage('custom', `[Quick Sync]: Creating a fresh new playlist file on branch "${githubBranch}".`);
+        }
+      } catch (err: any) {
+        logMessage('waiting', `[Quick Sync]: Playlist SHA resolution skipped: ${err.message}`);
+      }
+
+      const m3uContent = exportM3U(channels);
+      const encodedM3u = btoa(unescape(encodeURIComponent(m3uContent)));
+
+      const m3uCommitRes = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${githubM3uSavePath}`, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: `Auto-update virtual broadcast M3U playlist with ${channels.length} channels`,
+          content: encodedM3u,
+          branch: githubBranch,
+          sha: m3uSha
+        })
+      });
+
+      if (m3uCommitRes.ok) {
+        logMessage('custom', `[Quick Sync]: Successfully committed and pushed playlist to "/${githubM3uSavePath}"`);
+      } else {
+        const m3uErrText = await m3uCommitRes.text();
+        throw new Error(`M3U upload failed: ${m3uCommitRes.status} - ${m3uErrText}`);
+      }
+
+      // STEP 2: Sync the EPG Guide State (.json)
+      logMessage('custom', `[Quick Sync Step 2/4]: Saving current EPG guide state and scheduled programs at "/${githubEpgSavePath}"...`);
+      let epgSha: string | undefined;
+      try {
+        const epgCheck = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${githubEpgSavePath}?ref=${githubBranch}`, { headers });
+        if (epgCheck.ok) {
+          const epgData = await epgCheck.json();
+          epgSha = epgData.sha;
+          logMessage('custom', `[Quick Sync]: Found existing EPG JSON state file SHA: ${epgSha?.substring(0, 7)}`);
+        } else {
+          logMessage('custom', `[Quick Sync]: Creating a fresh new EPG JSON file on branch "${githubBranch}".`);
+        }
+      } catch (err: any) {
+        logMessage('waiting', `[Quick Sync]: EPG SHA resolution skipped: ${err.message}`);
+      }
+
+      const epgContent = JSON.stringify(channels, null, 2);
+      const encodedEpg = btoa(unescape(encodeURIComponent(epgContent)));
+
+      const epgCommitRes = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${githubEpgSavePath}`, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: `Auto-update EPG state and scheduled programs with ${channels.length} channels`,
+          content: encodedEpg,
+          branch: githubBranch,
+          sha: epgSha
+        })
+      });
+
+      if (epgCommitRes.ok) {
+        logMessage('custom', `[Quick Sync]: Successfully committed and pushed EPG state to "/${githubEpgSavePath}"`);
+      } else {
+        const epgErrText = await epgCommitRes.text();
+        throw new Error(`EPG state upload failed: ${epgCommitRes.status} - ${epgErrText}`);
+      }
+
+      // STEP 3: Sync the Static Player File (.html)
+      logMessage('custom', `[Quick Sync Step 3/4]: Bundling & publishing HTML TV Guide Player at "/${githubHtmlSavePath}"...`);
+      let htmlSha: string | undefined;
+      try {
+        const htmlCheck = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${githubHtmlSavePath}?ref=${githubBranch}`, { headers });
+        if (htmlCheck.ok) {
+          const htmlData = await htmlCheck.json();
+          htmlSha = htmlData.sha;
+          logMessage('custom', `[Quick Sync]: Found existing HTML player file SHA: ${htmlSha?.substring(0, 7)}`);
+        } else {
+          logMessage('custom', `[Quick Sync]: Creating a fresh new index player file on branch "${githubBranch}".`);
+        }
+      } catch (err: any) {
+        logMessage('waiting', `[Quick Sync]: HTML player SHA resolution skipped: ${err.message}`);
+      }
+
+      const playerContent = generateStaticPlayerHtml(channels, `Classic TV Guide & Video Player`, githubEpgSavePath);
+      const encodedHtml = btoa(unescape(encodeURIComponent(playerContent)));
+
+      const htmlCommitRes = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${githubHtmlSavePath}`, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: `Publish fully-featured static Guide player to /${githubHtmlSavePath} [Classic-TV]`,
+          content: encodedHtml,
+          branch: githubBranch,
+          sha: htmlSha
+        })
+      });
+
+      if (htmlCommitRes.ok) {
+        logMessage('custom', `[Quick Sync]: Successfully committed and pushed index player to "/${githubHtmlSavePath}"`);
+      } else {
+        const htmlErrText = await htmlCommitRes.text();
+        throw new Error(`HTML player upload failed: ${htmlCommitRes.status} - ${htmlErrText}`);
+      }
+
+      // STEP 4: Auto Trigger Workflow Dispatch
+      logMessage('custom', `[Quick Sync Step 4/4]: Querying available repository workflows to automate CI/CD pipeline triggers...`);
+      if (githubWorkflows && githubWorkflows.length > 0) {
+        const activeWorkflow = githubWorkflows[0];
+        logMessage('custom', `[Quick Sync]: Triggering active GitHub Actions workflow: "${activeWorkflow.name}" (ID: ${activeWorkflow.id})`);
+        await triggerWorkflowDispatch(activeWorkflow.id);
+      } else {
+        logMessage('custom', `[Quick Sync]: No Actions workflows registered. Relying on GitHub Pages standard direct host.`);
+      }
+
+      const liveUrl = getGitHubPagesUrl();
+      setGithubMessage(`⚡ Synchronized and published successfully!`);
+      logMessage('custom', `🚀 [STATUS: COMPLETE]: Broadcast player is active, fully synced, and ready to run.`);
+      if (liveUrl) {
+        logMessage('custom', `🚀 [PUBLIC DOMAIN]: Visitable at ${liveUrl}`);
+      }
+
+    } catch (err: any) {
+      setGithubMessage(`Quick Sync failed: ${err.message}`);
+      logMessage('error', `❌ [Quick Sync Failure]: ${err.message}`);
+    } finally {
+      setIsGithubLoading(false);
+      // Refresh repo file explorer to show updated files
+      fetchGithubContents(currentExplorerPath);
+    }
+  };
+
+  // Safe stream switch handler with debounce lock and atomic single-pass state updates
   const handleSelectChannel = (channel: Channel) => {
+    const now = Date.now();
+    if (channelSwitchLockRef.current && channelSwitchLockRef.current.id === channel.id && now - channelSwitchLockRef.current.time < 300) {
+      return; // Debounce rapid redundant clicks on same channel
+    }
+    channelSwitchLockRef.current = { id: channel.id, time: now };
+
+    // 1. High-priority: Update selected channel immediately
     setSelectedChannel(channel);
     setSelectedRowId(channel.id);
-    
-    const show = channel.shows?.[0] || {
+
+    // 2. Offload tracking & analytics outside the main event call stack
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(() => {
+        (window as any).gtag?.('event', 'channel_switch', { channel_id: channel.id, channel_name: channel.name });
+      });
+    } else {
+      setTimeout(() => {
+        (window as any).gtag?.('event', 'channel_switch', { channel_id: channel.id, channel_name: channel.name });
+      }, 0);
+    }
+
+    logMessage('epg', `[Matrix Selection]: Routing tuner to CH ${channel.number} "${channel.name}"`);
+
+    let targetShow = channel.shows?.[0] || {
       id: 'default',
       title: 'Live TV Stream',
       description: 'Generic IPTV Direct Stream',
@@ -519,29 +1263,30 @@ export default function App() {
       genre: channel.category,
       episodes: []
     };
-    const episode = show.episodes?.[0] || {
+    let targetEpisode = targetShow.episodes?.[0] || {
       id: 'default-ep',
       title: 'Live Stream Loop',
       url: channel.url || ''
     };
-
-    setSelectedShow(show);
-    setSelectedEpisode(episode);
-
-    logMessage('epg', `[Matrix Selection]: Routing tuner to CH ${channel.number} "${channel.name}"`);
+    let targetSeekOffset = 0;
 
     if (isLiveMode) {
       try {
         const live = getLiveEpisodeForChannel(channel, currentTimeMs);
-        setSelectedShow(live.show);
-        setSelectedEpisode(live.episode);
-        setLiveSeekOffset(live.seekOffsetSeconds);
+        targetShow = live.show;
+        targetEpisode = live.episode;
+        targetSeekOffset = live.seekOffsetSeconds;
       } catch (e) {
-        setLiveSeekOffset(0);
+        targetSeekOffset = 0;
       }
-    } else {
-      setLiveSeekOffset(0);
     }
+
+    // 3. Low-priority: Defer heavy schedule details & EPG state updates via startTransition
+    startTransition(() => {
+      setSelectedShow(targetShow);
+      setSelectedEpisode(targetEpisode);
+      setLiveSeekOffset(targetSeekOffset);
+    });
   };
 
   // Switch play mode
@@ -566,6 +1311,55 @@ export default function App() {
     logMessage('custom', 'Tuner mode: On-Demand seek index unlocked');
   };
 
+  const handleEpisodeEnded = () => {
+    if (isLiveMode) {
+      if (selectedChannel) {
+        try {
+          const live = getLiveEpisodeForChannel(selectedChannel, currentTimeMs);
+          if (live.remainingSeconds > 0) {
+            const jumpMs = (live.remainingSeconds + 1) * 1000;
+            setClockOffsetMs((prev) => prev + jumpMs);
+            setCurrentTimeMs((prev) => prev + jumpMs);
+            logMessage('custom', `EPG Segment ended early. Advancing virtual broadcast clock by ${Math.round(live.remainingSeconds)}s to next scheduled slot.`);
+          } else {
+            setCurrentTimeMs(Date.now() + clockOffsetMs + 1000);
+          }
+        } catch (e) {
+          setCurrentTimeMs(Date.now() + clockOffsetMs + 1000);
+        }
+      }
+    } else {
+      if (!selectedShow || !selectedEpisode || !selectedChannel) return;
+      const episodes = selectedShow.episodes || [];
+      const currentIndex = episodes.findIndex(e => e.id === selectedEpisode.id);
+      if (currentIndex !== -1 && currentIndex < episodes.length - 1) {
+        const nextEp = episodes[currentIndex + 1];
+        setSelectedEpisode(nextEp);
+        logMessage('custom', `VoD Auto-Advance: Next episode "${nextEp.title}" is now playing...`);
+      } else {
+        const shows = selectedChannel.shows || [];
+        const currentShowIndex = shows.findIndex(s => s.id === selectedShow.id);
+        if (currentShowIndex !== -1 && currentShowIndex < shows.length - 1) {
+          const nextShow = shows[currentShowIndex + 1];
+          const nextEp = nextShow.episodes?.[0];
+          if (nextEp) {
+            setSelectedShow(nextShow);
+            setSelectedEpisode(nextEp);
+            logMessage('custom', `VoD Auto-Advance: Moving to next show "${nextShow.title}", playing "${nextEp.title}"...`);
+          }
+        } else if (shows.length > 0) {
+          const firstShow = shows[0];
+          const firstEp = firstShow.episodes?.[0];
+          if (firstEp) {
+            setSelectedShow(firstShow);
+            setSelectedEpisode(firstEp);
+            logMessage('custom', `VoD Auto-Advance: Looping back to first show "${firstShow.title}"...`);
+          }
+        }
+      }
+    }
+  };
+
   // Local file loading
   const triggerFileLoad = () => {
     fileInputRef.current?.click();
@@ -579,9 +1373,15 @@ export default function App() {
     reader.onload = (event) => {
       const text = event.target?.result as string;
       try {
-        const parsed = parseM3U(text, file.name);
+        let parsed: Channel[] = [];
+        if (file.name.toLowerCase().endsWith('.json')) {
+          parsed = parseMasterPlaylistJSON(text, file.name);
+        } else {
+          parsed = parseM3U(text, file.name);
+        }
+
         if (parsed.length === 0) {
-          logMessage('error', `Parsed 0 channels from "${file.name}". Make sure it is a valid M3U file.`);
+          logMessage('error', `Parsed 0 channels from "${file.name}". Make sure it is a valid file.`);
           return;
         }
         setChannels((prev) => [...prev, ...parsed]);
@@ -886,6 +1686,38 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
     }
   };
 
+  // TOGGLE FAVORITE
+  const toggleFavorite = async (channelId: string) => {
+    const updatedChannels = channels.map((ch) => {
+      if (ch.id === channelId) {
+        const newFav = !ch.favorite;
+        logMessage('custom', `${newFav ? '★ Starred' : '☆ Unstarred'} channel "${ch.name}"`);
+        return { ...ch, favorite: newFav };
+      }
+      return ch;
+    });
+    setChannels(updatedChannels);
+
+    // Sync selected channel state if it is the toggled one
+    if (selectedChannel && selectedChannel.id === channelId) {
+      setSelectedChannel(prev => ({ ...prev, favorite: !prev.favorite }));
+    }
+
+    try {
+      const saveRes = await fetch('/api/channels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedChannels),
+      });
+      if (!saveRes.ok) {
+        logMessage('error', 'Failed to persist favorite toggle state to database.');
+      }
+    } catch (err: any) {
+      console.error('Error saving favorite to server:', err);
+      logMessage('error', `Error saving favorite: ${err.message}`);
+    }
+  };
+
   // BACKUP URLS CONTROLLER
   const openBackupModal = (channelId: string) => {
     setBackupChannelId(channelId);
@@ -982,58 +1814,151 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
       return;
     }
 
-    // 3. Gather all shows and episodes from other channels
-    const queues: Array<Array<{ show: Show; episode: Episode }>> = [];
+    // Helper to extract category or genre for any channel/show combination
+    const getCategoryOrGenre = (ch: Channel, show: Show): string => {
+      const channelCat = ch.category || '';
+      const showGenre = show.genre || '';
+      if (channelCat === 'Westerns' || showGenre.toLowerCase().includes('western')) return 'Westerns';
+      if (channelCat === 'Crime Shows' || showGenre.toLowerCase().includes('crime')) return 'Crime Shows';
+      if (channelCat === 'News' || showGenre.toLowerCase().includes('news')) return 'News';
+      if (channelCat === 'Movies' || showGenre.toLowerCase().includes('movie')) return 'Movies';
+      if (
+        channelCat === 'TV Shows' || 
+        showGenre.toLowerCase().includes('tv') || 
+        showGenre.toLowerCase().includes('comedy') || 
+        showGenre.toLowerCase().includes('drama')
+      ) return 'TV Shows';
+      return channelCat || 'General';
+    };
+
+    interface PoolItem {
+      show: Show;
+      episode: Episode;
+      category: string;
+    }
+
+    const masterPool: PoolItem[] = [];
     otherChannels.forEach((ch) => {
-      const chItems: Array<{ show: Show; episode: Episode }> = [];
       ch.shows.forEach((show) => {
         show.episodes.forEach((ep) => {
-          chItems.push({ show, episode: ep });
+          masterPool.push({
+            show,
+            episode: ep,
+            category: getCategoryOrGenre(ch, show)
+          });
         });
       });
-      if (chItems.length > 0) {
-        queues.push(chItems);
-      }
     });
 
-    if (queues.length === 0) {
+    if (masterPool.length === 0) {
       if (!quiet) logMessage('error', 'No episodes found in other active channels.');
       return;
     }
 
-    // 4. Perform fair-play round robin selection
-    const scheduledItems: Array<{ show: Show; episode: Episode }> = [];
-    let hasMore = true;
-    let index = 0;
+    // Filter master pool by active schedulerSelectedGenres
+    // "intelligently skip or flag shows tagged with 'Western' or 'Crime' when running the round-robin generator"
+    const activePool = masterPool.filter((item) => {
+      const cat = item.category;
+      const isWestern = cat === 'Westerns' || (item.show.genre || '').toLowerCase().includes('western');
+      const isCrime = cat === 'Crime Shows' || (item.show.genre || '').toLowerCase().includes('crime');
 
-    while (hasMore) {
-      hasMore = false;
-      for (let q = 0; q < queues.length; q++) {
-        if (index < queues[q].length) {
-          scheduledItems.push(queues[q][index]);
-          hasMore = true;
-        }
-      }
-      index++;
+      if (isWestern && !schedulerSelectedGenres.includes('Westerns')) return false;
+      if (isCrime && !schedulerSelectedGenres.includes('Crime Shows')) return false;
+      
+      return schedulerSelectedGenres.includes(cat) || schedulerSelectedGenres.includes(item.show.genre || '');
+    });
+
+    if (activePool.length === 0) {
+      if (!quiet) logMessage('error', 'No episodes match the selected active genres for scheduling.');
+      return;
     }
 
-    // 5. Convert scheduled items to Classic Cinema & Movies shows list
-    const newShows: Show[] = scheduledItems.map((item, idx) => ({
-      id: `rcs-show-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-      title: item.show.title,
-      description: item.show.description,
-      year: item.show.year,
-      genre: item.show.genre,
-      episodes: [
-        {
-          id: `rcs-ep-${idx}-${Date.now()}`,
-          title: item.episode.title,
-          season: item.episode.season || '1',
-          episodeNumber: item.episode.episodeNumber || String(idx + 1),
-          url: item.episode.url
-        }
-      ]
-    }));
+    // 4. Create blocks of schedule. A single daily sequence has 48 slots (30 minutes each for 24 hours).
+    const slotsCount = 48;
+    const blockLayoutHours = Number(schedulerBlockLayout) || 4;
+    const slotsPerBlock = blockLayoutHours * 2; 
+
+    const scheduledItems: PoolItem[] = [];
+
+    // Helper to retrieve pool for a specific theme
+    const getPoolForTheme = (theme: string): PoolItem[] => {
+      if (theme === 'All' || theme === 'Mix') {
+        return activePool;
+      }
+      const filtered = activePool.filter((item) => {
+        return item.category === theme || 
+          (item.show.genre || '').toLowerCase().includes(theme.toLowerCase().replace('shows', '').replace('s', '').trim());
+      });
+      return filtered.length > 0 ? filtered : activePool; 
+    };
+
+    // Prepare theme pools & pointers
+    const themePools: Record<string, PoolItem[]> = {
+      morning: getPoolForTheme(schedulerMorningTheme),
+      afternoon: getPoolForTheme(schedulerAfternoonTheme),
+      evening: getPoolForTheme(schedulerEveningTheme),
+      lateLate: getPoolForTheme(schedulerLateLateTheme)
+    };
+
+    const themePointers: Record<string, number> = {
+      morning: 0,
+      afternoon: 0,
+      evening: 0,
+      lateLate: 0
+    };
+
+    // Round-robin selection through each block
+    for (let s = 0; s < slotsCount; s++) {
+      const hour = s * 0.5;
+      let band: 'morning' | 'afternoon' | 'evening' | 'lateLate';
+
+      if (hour >= 6 && hour < 12) {
+        band = 'morning';
+      } else if (hour >= 12 && hour < 18) {
+        band = 'afternoon';
+      } else if (hour >= 18 && hour < 24) {
+        band = 'evening';
+      } else {
+        band = 'lateLate';
+      }
+
+      const pool = themePools[band];
+      const pointer = themePointers[band];
+      const item = pool[pointer % pool.length];
+
+      scheduledItems.push(item);
+      themePointers[band]++;
+    }
+
+    // Convert scheduled items to Classic Cinema & Movies shows list
+    const newShows: Show[] = scheduledItems.map((item, idx) => {
+      const isWestern = item.category === 'Westerns' || (item.show.genre || '').toLowerCase().includes('western');
+      const isCrime = item.category === 'Crime Shows' || (item.show.genre || '').toLowerCase().includes('crime');
+      
+      let titleFlag = '';
+      if (isWestern) {
+        titleFlag = ' 🤠'; 
+      } else if (isCrime) {
+        titleFlag = ' 🔍'; 
+      }
+
+      return {
+        id: `rcs-show-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        title: `${item.show.title}${titleFlag}`,
+        description: `[Scheduled: Theme Block] Genre: ${item.category}. ${item.show.description}`,
+        year: item.show.year,
+        genre: item.show.genre,
+        episodes: [
+          {
+            id: `rcs-ep-${idx}-${Date.now()}`,
+            title: `${item.episode.title}${titleFlag}`,
+            season: item.episode.season || '1',
+            episodeNumber: item.episode.episodeNumber || String(idx + 1),
+            url: item.episode.url
+          }
+        ]
+      };
+    });
 
     setChannels((prev) =>
       prev.map((ch, idx) => {
@@ -1069,7 +1994,7 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
     if (!quiet) {
       logMessage(
         'epg',
-        `[Auto-Scheduler]: Scheduled continuous daily loop of ${newShows.length} shows on "Classic Cinema & Movies" in fair-play round-robin sequence.`
+        `[Auto-Scheduler]: Scheduled 24-hour loop of ${newShows.length} shows on "Classic Cinema & Movies" in themed mixes (Morning: ${schedulerMorningTheme}, Afternoon: ${schedulerAfternoonTheme}, Evening: ${schedulerEveningTheme}, Late Late: ${schedulerLateLateTheme}) in ${schedulerBlockLayout}-hour layout blocks.`
       );
     }
   };
@@ -1113,6 +2038,7 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
     });
   }
 
+  let regexSearchError: string | null = null;
   if (searchQuery.trim()) {
     const query = searchQuery.trim();
     const regexMatch = query.match(/^\/(.+)\/([gimy]*)$/);
@@ -1123,9 +2049,8 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
         const flags = regexMatch[2];
         const regex = new RegExp(pattern, flags);
         filteredChannels = filteredChannels.filter((ch) => regex.test(ch.name) || regex.test(ch.category));
-        if (regexSearchError) setRegexSearchError(null);
       } catch (e) {
-        if (!regexSearchError) setRegexSearchError('Invalid Regular Expression syntax');
+        regexSearchError = 'Invalid Regular Expression syntax';
       }
     } else {
       const lowerQuery = query.toLowerCase();
@@ -1135,10 +2060,11 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
           ch.category.toLowerCase().includes(lowerQuery) ||
           ch.number.includes(lowerQuery)
       );
-      if (regexSearchError) setRegexSearchError(null);
     }
-  } else {
-    if (regexSearchError) setRegexSearchError(null);
+  }
+
+  if (showFavoritesOnly) {
+    filteredChannels = filteredChannels.filter((ch) => ch.favorite);
   }
 
   // Active channel EPG details
@@ -1161,46 +2087,226 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
 
   return (
     <div className="flex flex-col h-screen w-full bg-[#0b0c10] text-[#c5c6c7] font-sans overflow-hidden">
-      
-      {/* 1. Header Branded Banner Rail */}
-      <header className="h-16 border-b border-purple-900/40 bg-[#1f2833]/30 px-6 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-tr from-purple-700 to-indigo-600 rounded-lg flex items-center justify-center text-white font-black text-sm shadow-md shadow-purple-500/20 tracking-wider">
-            M3U
-          </div>
-          <div>
-            <h1 className="text-sm font-black text-white uppercase tracking-wider font-sans flex items-center gap-2">
-              M3U MATRIX PRO <span className="text-[9px] bg-purple-500/10 border border-purple-500/30 text-purple-400 px-1.5 py-0.5 rounded font-mono font-normal">WEB BUILD</span>
-            </h1>
-            <p className="text-[10px] text-gray-500 font-mono">Professional IPTV Playlist Suite</p>
-          </div>
-        </div>
+      {!isWorkspaceOpen ? (
+        /* Cinema-First Viewing Mode Layout */
+        <div className="relative w-full h-full overflow-hidden select-none">
+          {/* Base Layer: completely uninterrupted backdrop (z-index: 1) */}
+          {selectedEpisode && selectedShow ? (
+            <CustomVideoPlayer
+              episode={selectedEpisode}
+              show={selectedShow}
+              channelId={selectedChannel?.id || ''}
+              channelName={selectedChannel?.name || 'Retro TV Network'}
+              isLiveMode={isLiveMode}
+              liveSeekOffset={liveSeekOffset}
+              onLogEvent={logMessage}
+              isCinemaBackdrop={true}
+              videoFit={videoFit}
+              onEpisodeEnded={handleEpisodeEnded}
+              schedulingMode={schedulingMode}
+              onDurationProbed={handleDurationProbed}
+              nextEpisode={activeChannelEpg?.upcomingSlots?.[0]?.episode}
+            />
+          ) : (
+            <div className="fixed inset-0 w-full h-full bg-black flex items-center justify-center text-white/30 text-xs font-mono">
+              Readying Satellite Dish Signals...
+            </div>
+          )}
 
-        {/* Global Live Statistics Status */}
-        <div className="hidden md:flex items-center gap-6 text-[10px] font-mono bg-black/40 px-4 py-2 border border-purple-900/30 rounded-lg">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-            <span>TOTAL: <strong className="text-white">{channels.length}</strong></span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-green-500" />
-            <span>WORKING: <strong className="text-green-400">{channels.filter((c) => c.status === 'working').length}</strong></span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-red-500" />
-            <span>BROKEN: <strong className="text-red-400">{channels.filter((c) => c.status === 'broken').length}</strong></span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-slate-500" />
-            <span>UNCHECKED: <strong className="text-gray-400">{channels.filter((c) => !c.status || c.status === 'unchecked').length}</strong></span>
-          </div>
-        </div>
+          {/* Invisible Hover Triggers (Hitboxes) for sliding/fading elements */}
+          <div
+            className="hover-hitbox-left"
+            onMouseEnter={() => {
+              setIsStationDrawerOpen(true);
+              resetDecayTimer();
+            }}
+          />
+          <div
+            className="hover-hitbox-bottom"
+            onMouseEnter={() => {
+              setIsEPGOverlayVisible(true);
+              resetDecayTimer();
+            }}
+          />
 
-        <div className="flex items-center gap-3 text-xs font-mono text-gray-400">
-          <Clock className="w-4 h-4 text-purple-400" />
-          <span>{new Date(currentTimeMs).toLocaleTimeString([], { hour12: false })}</span>
+          {/* Sliding Left Channel Menu Drawer (z-index: 100) */}
+          <div
+            onMouseEnter={() => {
+              isHoveringMenuRef.current = true;
+              clearDecayTimer();
+            }}
+            onMouseLeave={() => {
+              isHoveringMenuRef.current = false;
+              resetDecayTimer();
+            }}
+            className="transition-all"
+          >
+            <StationDirectory
+              channels={channels}
+              selectedChannel={selectedChannel}
+              onSelectChannel={(ch) => {
+                handleSelectChannel(ch);
+                logMessage('epg', `[Cinema Tuner]: Tuned satellite dish to CH ${ch.number} - ${ch.name}`);
+                resetDecayTimer();
+              }}
+              isOpen={isStationDrawerOpen}
+              currentTimeMs={currentTimeMs}
+            />
+          </div>
+
+          {/* Floating Bottom TV Guide Overlay (z-index: 90) */}
+          <div
+            onMouseEnter={() => {
+              isHoveringMenuRef.current = true;
+              clearDecayTimer();
+            }}
+            onMouseLeave={() => {
+              isHoveringMenuRef.current = false;
+              resetDecayTimer();
+            }}
+            className="transition-all"
+          >
+            <CinemaEPGGuide
+              channel={selectedChannel}
+              selectedEpisode={selectedEpisode}
+              isLiveMode={isLiveMode}
+              onSelectEpisode={(show, ep, isLive) => {
+                setSelectedShow(show);
+                setSelectedEpisode(ep);
+                setIsLiveMode(isLive);
+                if (isLive && selectedChannel) {
+                  try {
+                    const live = getLiveEpisodeForChannel(selectedChannel, currentTimeMs);
+                    setLiveSeekOffset(live.seekOffsetSeconds);
+                  } catch (e) {
+                    setLiveSeekOffset(0);
+                  }
+                  logMessage('epg', `[Cinema Tuner]: Synced back to Live Simulated Broadcast for ${show.title}`);
+                } else {
+                  setLiveSeekOffset(0);
+                  logMessage('epg', `[Cinema Tuner]: Opened Interactive VOD Segment: "${show.title} - ${ep.title}"`);
+                }
+                resetDecayTimer();
+              }}
+              isVisible={isEPGOverlayVisible}
+              currentTimeMs={currentTimeMs}
+            />
+          </div>
+
+          {/* Elegant Top HUD overlay controls bar */}
+          <div
+            onMouseEnter={() => {
+              isHoveringMenuRef.current = true;
+              clearDecayTimer();
+            }}
+            onMouseLeave={() => {
+              isHoveringMenuRef.current = false;
+              resetDecayTimer();
+            }}
+            className={`fixed top-4 right-4 z-[110] flex items-center gap-3 transition-all duration-500 ${
+              isHUDVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'
+            }`}
+          >
+            {/* HUD Status Pill */}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10 text-[10px] font-mono shadow-xl">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-white/60">STATION:</span>
+              <strong className="text-white tracking-wide uppercase">
+                {selectedChannel?.name || 'OFFLINE'}
+              </strong>
+            </div>
+
+            {/* Aspect Ratio Toggle HUD Button */}
+            <button
+              onClick={() => {
+                setVideoFit((prev) => {
+                  const next = prev === 'cover' ? 'contain' : 'cover';
+                  logMessage('custom', `Aspect Ratio switched to: ${next === 'cover' ? 'FILL SCREEN (COVER)' : 'LETTERBOX (CONTAIN)'}`);
+                  return next;
+                });
+              }}
+              className="px-3.5 py-1.5 bg-black/60 hover:bg-black/80 backdrop-blur-md text-white border border-white/10 text-[10px] font-mono rounded-full flex items-center gap-1.5 shadow-lg active:scale-95 transition-all cursor-pointer"
+              title="Toggle aspect ratio: Cover (Full screen) vs Contain (4:3 Letterbox) [Shortcut: A]"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+              <span>RATIO: {videoFit.toUpperCase()}</span>
+            </button>
+
+            {/* Floating Workspace Mode Toggle Button */}
+            <button
+              onClick={() => setIsWorkspaceOpen(true)}
+              className="px-4 py-1.5 bg-[#8c5cd0]/80 hover:bg-[#8c5cd0] backdrop-blur-md text-white border border-[#8c5cd0]/40 text-[10px] font-black tracking-widest rounded-full flex items-center gap-2 shadow-lg hover:shadow-purple-500/20 active:scale-95 transition-all cursor-pointer"
+              title="Open Pro Matrix Spreadsheet & Sync console"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>WORKSPACE DECK</span>
+            </button>
+          </div>
+
+          {/* Quick-instructions bottom-left corner anchor */}
+          <div
+            className={`fixed bottom-4 left-6 z-[110] text-left transition-all duration-500 select-none pointer-events-none ${
+              isHUDVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+            }`}
+          >
+            <p className="text-[10px] font-mono text-white/40 leading-normal uppercase tracking-wider">
+              [M] Left Menu • [G] Bottom Guide • [A] Toggle Ratio • [S] Pro Workspace
+            </p>
+          </div>
         </div>
-      </header>
+      ) : (
+        /* Workspace Mode: original layout wraps inside a sub-container */
+        <div className="flex-1 flex flex-col overflow-hidden relative">
+          
+          {/* 1. Header Branded Banner Rail */}
+          <header className="h-16 border-b border-purple-900/40 bg-[#1f2833]/30 px-6 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-tr from-purple-700 to-indigo-600 rounded-lg flex items-center justify-center text-white font-black text-sm shadow-md shadow-purple-500/20 tracking-wider">
+                M3U
+              </div>
+              <div>
+                <h1 className="text-sm font-black text-white uppercase tracking-wider font-sans flex items-center gap-2">
+                  Classic TV Guide & News Player <span className="text-[9px] bg-purple-500/10 border border-purple-500/30 text-purple-400 px-1.5 py-0.5 rounded font-mono font-normal">WEB BUILD</span>
+                </h1>
+                <p className="text-[10px] text-gray-500 font-mono">Professional IPTV Playlist Suite</p>
+              </div>
+            </div>
+
+            {/* Global Live Statistics Status */}
+            <div className="hidden md:flex items-center gap-6 text-[10px] font-mono bg-black/40 px-4 py-2 border border-purple-900/30 rounded-lg">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                <span>TOTAL: <strong className="text-white">{channels.length}</strong></span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-green-500" />
+                <span>WORKING: <strong className="text-green-400">{channels.filter((c) => c.status === 'working').length}</strong></span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-red-500" />
+                <span>BROKEN: <strong className="text-red-400">{channels.filter((c) => c.status === 'broken').length}</strong></span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-slate-500" />
+                <span>UNCHECKED: <strong className="text-gray-400">{channels.filter((c) => !c.status || c.status === 'unchecked').length}</strong></span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 text-xs font-mono text-gray-400">
+              <Clock className="w-4 h-4 text-purple-400" />
+              <span>{new Date(currentTimeMs).toLocaleTimeString([], { hour12: false })}</span>
+
+              <button
+                onClick={() => setIsWorkspaceOpen(false)}
+                className="ml-3 px-3 py-1 bg-gradient-to-r from-purple-800 to-[#8c5cd0] hover:from-purple-700 hover:to-purple-600 text-white rounded-md text-[11px] font-black tracking-wider transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 shadow-md shadow-purple-500/10 animate-pulse"
+                title="Switch to edge-to-edge Cinema Viewing Mode"
+                id="btn-workspace-cinema-view"
+              >
+                <MonitorPlay className="w-3.5 h-3.5 animate-pulse" />
+                <span>CINEMA VIEW</span>
+              </button>
+            </div>
+          </header>
 
       {/* 2. Action Toolbar Ribbon */}
       <nav className="p-3 border-b border-purple-950/30 bg-[#0f1015] flex flex-wrap items-center justify-between gap-2 shrink-0">
@@ -1243,6 +2349,17 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
           >
             <Calendar className="w-3.5 h-3.5" />
             <span>FETCH EPG</span>
+          </button>
+
+          {/* COMMERCIAL FILLS */}
+          <button
+            onClick={() => setShowCommercialModal(true)}
+            className="px-3 py-1.5 bg-amber-950/30 hover:bg-amber-900/30 border border-amber-800/30 hover:border-amber-700/50 text-amber-300 text-[11px] font-bold rounded-md flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+            title="Open Commercial & Interstitial Filler Pool & Gap Simulator"
+            id="btn-matrix-commercials"
+          >
+            <Tv className="w-3.5 h-3.5 text-amber-400" />
+            <span>COMMERCIALS</span>
           </button>
 
           <div className="h-5 w-[1px] bg-gray-800 mx-1" />
@@ -1292,7 +2409,7 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
 
           {/* AUTO-SCHEDULE */}
           <button
-            onClick={() => handleAutoScheduleClassicCinema()}
+            onClick={() => setShowAutoSchedulerModal(true)}
             className="px-3 py-1.5 bg-gradient-to-r from-purple-900 to-indigo-900 hover:from-purple-800 hover:to-indigo-800 border border-purple-700/50 text-white text-[11px] font-black rounded-md flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
             title="Automatically schedule loaded channels into Classic Cinema daily loop in round-robin order"
             id="btn-matrix-auto-schedule"
@@ -1496,6 +2613,21 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                   </button>
                 )}
               </div>
+
+              {/* Favorites Only Toggle */}
+              <label className="flex items-center gap-1.5 bg-[#1b1c24] border border-purple-950/30 rounded-lg px-2.5 py-1 cursor-pointer hover:bg-purple-950/20 transition-all select-none">
+                <input
+                  type="checkbox"
+                  checked={showFavoritesOnly}
+                  onChange={(e) => {
+                    setShowFavoritesOnly(e.target.checked);
+                    logMessage('custom', `Show Favorites Only set to: ${e.target.checked}`);
+                  }}
+                  className="w-3.5 h-3.5 rounded text-purple-600 bg-black/40 border-purple-950/30 focus:ring-purple-500 cursor-pointer accent-purple-600"
+                />
+                <Star className={`w-3.5 h-3.5 ${showFavoritesOnly ? 'text-amber-400 fill-amber-400' : 'text-gray-400'}`} />
+                <span className="text-[10px] font-mono tracking-wider uppercase text-gray-300 hidden xs:inline">FAVORITES ONLY</span>
+              </label>
             </div>
 
             {/* Clipboard and Move Shortcuts */}
@@ -1589,20 +2721,27 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
               </button>
               <button
                 onClick={() => {
-                  setWorkspaceTab('github');
-                  if (githubRepo) {
-                    fetchGithubContents(currentExplorerPath);
-                    fetchGithubWorkflows();
-                  }
+                  setWorkspaceTab('export');
                 }}
                 className={`px-4 py-1.5 rounded-md text-[11px] font-black tracking-wider uppercase transition-all cursor-pointer flex items-center gap-2 ${
-                  workspaceTab === 'github'
+                  workspaceTab === 'export'
                     ? 'bg-purple-900 text-white shadow-md'
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
-                <Github className="w-3.5 h-3.5" />
-                <span>GitHub Sync Console</span>
+                <Download className="w-3.5 h-3.5" />
+                <span>Export Static Player</span>
+              </button>
+              <button
+                onClick={() => setWorkspaceTab('scraper')}
+                className={`px-4 py-1.5 rounded-md text-[11px] font-black tracking-wider uppercase transition-all cursor-pointer flex items-center gap-2 ${
+                  workspaceTab === 'scraper'
+                    ? 'bg-purple-900 text-white shadow-md'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <Cpu className="w-3.5 h-3.5 animate-pulse" />
+                <span>AI Scraper</span>
               </button>
             </div>
             <div className="text-[10px] font-mono text-gray-500 uppercase tracking-wider hidden sm:block">
@@ -1610,7 +2749,9 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                 ? 'Double click any cell to edit inline' 
                 : workspaceTab === 'epg' 
                   ? 'Real-time Program Loops' 
-                  : 'GitHub REST API Integration Deck'}
+                  : workspaceTab === 'export'
+                    ? 'Standalone HTML & Playlist Exporter'
+                    : 'Stealth Scraper & Gemini AI Enrichment'}
             </div>
           </div>
 
@@ -1649,6 +2790,7 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                     <thead>
                       <tr className="bg-[#121319] border-b border-purple-950/30 text-purple-400 font-mono uppercase text-[9px] tracking-wider sticky top-0 z-10">
                         <th className="p-3 text-center w-12">#</th>
+                        <th className="p-3 text-center w-12">FAV</th>
                         <th className="p-3 text-center w-14">STATUS</th>
                         <th className="p-3 w-32">GROUP</th>
                         <th className="p-3 w-44">CHANNEL NAME</th>
@@ -1709,6 +2851,20 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                                   {ch.number}
                                 </span>
                               )}
+                            </td>
+
+                            {/* Favorite Star Icon Toggler */}
+                            <td className="p-2.5 text-center">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleFavorite(ch.id);
+                                }}
+                                className="p-1 hover:scale-110 active:scale-95 transition-all text-gray-600 hover:text-amber-400 cursor-pointer"
+                                title={ch.favorite ? "Unstar channel" : "Star channel"}
+                              >
+                                <Star className={`w-4 h-4 mx-auto ${ch.favorite ? 'text-amber-400 fill-amber-400' : 'text-gray-600 hover:text-amber-400'}`} />
+                              </button>
                             </td>
 
                             {/* Connection Audit Status */}
@@ -1974,6 +3130,36 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                         );
                       })}
                     </tbody>
+                    <tfoot className="bg-[#121319] border-t-2 border-purple-900/50 text-white font-mono sticky bottom-0 z-10 shadow-lg">
+                      <tr>
+                        <td colSpan={10} className="p-3 bg-[#121319]/95 backdrop-blur-md">
+                          <div className="flex flex-wrap items-center justify-between gap-4 text-xs font-mono">
+                            <div className="flex items-center gap-6">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                                <span className="text-gray-400 uppercase text-[10px] tracking-wider font-semibold">Total Channels:</span>
+                                <strong className="text-purple-300 font-bold text-sm">{filteredChannels.length}</strong>
+                                {filteredChannels.length !== channels.length && (
+                                  <span className="text-[10px] text-gray-500">({channels.length} total in playlist)</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                                <span className="text-gray-400 uppercase text-[10px] tracking-wider font-semibold">Total Scheduled Episodes:</span>
+                                <strong className="text-indigo-300 font-bold text-sm">
+                                  {filteredChannels.reduce((sum, ch) => sum + (ch.shows ? ch.shows.reduce((sAcc, show) => sAcc + (show.episodes?.length || 0), 0) : 0), 0)}
+                                </strong>
+                              </div>
+                            </div>
+                            <div className="text-[10px] text-gray-400 font-mono flex items-center gap-3">
+                              <span className="px-2 py-0.5 rounded bg-purple-950/40 border border-purple-800/30 text-purple-300">
+                                Matrix Active
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    </tfoot>
                   </table>
                 )}
               </div>
@@ -1988,37 +3174,326 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                 isLiveMode={isLiveMode}
                 currentTimeMs={currentTimeMs}
                 onSelectEpisode={(ch, s, ep, isLive) => {
-                  setSelectedChannel(ch);
-                  setSelectedShow(s);
-                  setSelectedEpisode(ep);
-                  setIsLiveMode(isLive);
+                  startTransition(() => {
+                    setSelectedChannel(ch);
+                    setSelectedShow(s);
+                    setSelectedEpisode(ep);
+                    setIsLiveMode(isLive);
+                  });
                   logMessage('epg', `[EPG Timeline Switch]: Selected program "${s.title}"`);
                 }}
                 onLogEvent={logMessage}
               />
             </div>
-          ) : (
+          ) : workspaceTab === 'export' ? (
+            <div className="flex-1 overflow-y-auto p-5 bg-[#08090c] scrollbar-thin space-y-5 text-left text-gray-200">
+              <div className="max-w-4xl mx-auto space-y-6">
+                
+                {/* Header Section */}
+                <div className="flex flex-col gap-1 border-b border-purple-950/20 pb-4">
+                  <h2 className="text-lg font-black text-white uppercase tracking-wider flex items-center gap-2">
+                    <Download className="w-5 h-5 text-purple-400" />
+                    <span>Standalone Exporter & Publisher</span>
+                  </h2>
+                  <p className="text-xs text-gray-400 leading-normal">
+                    Generate, preview, and download fully-featured TV matrix schedules and cinematic streaming players designed to run offline or host on any static hosting server with zero configurations.
+                  </p>
+                </div>
+
+                {/* Grid layout */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  
+                  {/* Card 1: Standard Standalone Cinematic HTML Player */}
+                  <div className="bg-[#10111a] border border-purple-950/20 rounded-xl p-5 shadow-xl flex flex-col justify-between space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between border-b border-purple-950/20 pb-2">
+                        <div className="flex items-center gap-2">
+                          <MonitorPlay className="w-4 h-4 text-purple-400" />
+                          <h3 className="text-xs font-black text-white uppercase tracking-wider">Cinematic HTML Player</h3>
+                        </div>
+                        <span className="text-[9px] font-mono font-bold bg-purple-950/40 border border-purple-900/30 text-purple-400 px-2 py-0.5 rounded-full uppercase">
+                          index.html
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 leading-relaxed font-sans">
+                        Compiles your active matrix spreadsheet directly into a high-fidelity standalone single-page application. Includes the responsive EPG timeline scheduler, custom sidebar directory, real-time sync clock, CRT screen filters, and full HLS media player integration.
+                      </p>
+                      <ul className="text-[10px] space-y-1 text-gray-500 font-sans list-disc pl-4 pt-1">
+                        <li>Built-in native video controls support.</li>
+                        <li>Automated local browser-friendly play scheduler.</li>
+                        <li>Encodes and parses media stream endpoints seamlessly.</li>
+                      </ul>
+                    </div>
+
+                    <div className="space-y-2.5 pt-2">
+                      <button
+                        onClick={handlePreviewStaticPlayer}
+                        disabled={isGeneratingPreview || channels.length === 0}
+                        className="w-full py-2 bg-[#12131a] hover:bg-[#1a1c29] border border-purple-950/30 hover:border-purple-800 text-gray-300 hover:text-white text-[11px] font-bold rounded-lg transition-all uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Globe className="w-4 h-4 text-purple-400" />
+                        <span>Preview Local Player</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          try {
+                            const htmlContent = generateStaticPlayerHtml(channels, `Classic TV Guide & Video Player`, 'epg.json');
+                            const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = 'index.html';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            logMessage('custom', '[Player Export]: Downloaded "index.html" standalone cinematic player successfully.');
+                          } catch (err: any) {
+                            logMessage('error', `Failed to export standalone player: ${err.message}`);
+                          }
+                        }}
+                        disabled={channels.length === 0}
+                        className="w-full py-2.5 bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-600 hover:to-indigo-700 text-white text-[11px] font-black rounded-lg transition-all uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer shadow-lg"
+                      >
+                        <Download className="w-4 h-4 text-white animate-pulse" />
+                        <span>Download Standalone Player</span>
+                      </button>
+
+                      {staticPlayerPreviewBlobUrl && (
+                        <div className="pt-2 text-center">
+                          <a
+                            href={staticPlayerPreviewBlobUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center justify-center gap-1.5 px-3 py-1 bg-green-950/20 border border-green-800/30 hover:border-green-600/50 text-green-400 hover:text-green-300 text-[10px] font-mono font-bold rounded-full transition-colors animate-pulse"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                            <span>LAUNCH LOCAL PREVIEW ↗</span>
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card 2: M3U Playlist Exporter */}
+                  <div className="bg-[#10111a] border border-purple-950/20 rounded-xl p-5 shadow-xl flex flex-col justify-between space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between border-b border-purple-950/20 pb-2">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-purple-400" />
+                          <h3 className="text-xs font-black text-white uppercase tracking-wider">M3U Playlist File</h3>
+                        </div>
+                        <span className="text-[9px] font-mono font-bold bg-purple-950/40 border border-purple-900/30 text-purple-400 px-2 py-0.5 rounded-full uppercase">
+                          playlist.m3u
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 leading-relaxed font-sans">
+                        Exports your active matrix directory structure in standard M3U/M3U8 playlist syntax, fully compatible with external media centers and IPTV apps such as VLC, Kodi, IPTV Smarters, or Tivimate.
+                      </p>
+                      <ul className="text-[10px] space-y-1 text-gray-500 font-sans list-disc pl-4 pt-1">
+                        <li>Maintains custom channel categorizations.</li>
+                        <li>Includes logo badges and tag identifiers.</li>
+                        <li>Compatible with mobile, tablet, and smart TVs.</li>
+                      </ul>
+                    </div>
+
+                    <div className="pt-2">
+                      <button
+                        onClick={handleSaveM3U}
+                        disabled={channels.length === 0}
+                        className="w-full py-2.5 bg-purple-900/40 hover:bg-purple-900/70 border border-purple-800/30 text-purple-200 hover:text-white text-[11px] font-bold rounded-lg transition-colors uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>Download Playlist M3U</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Card 3: CSV Channel Directory Index */}
+                  <div className="bg-[#10111a] border border-purple-950/20 rounded-xl p-5 shadow-xl flex flex-col justify-between space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between border-b border-purple-950/20 pb-2">
+                        <div className="flex items-center gap-2">
+                          <FileSpreadsheet className="w-4 h-4 text-purple-400" />
+                          <h3 className="text-xs font-black text-white uppercase tracking-wider">Channel Index Spreadsheet</h3>
+                        </div>
+                        <span className="text-[9px] font-mono font-bold bg-purple-950/40 border border-purple-900/30 text-purple-400 px-2 py-0.5 rounded-full uppercase">
+                          channels.csv
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 leading-relaxed font-sans">
+                        Downloads your entire matrix library of channels, shows, and streaming links as a structured CSV dataset. Great for backup, batch auditing, or importing directly back into desktop spreadsheet editors.
+                      </p>
+                    </div>
+
+                    <div className="pt-2">
+                      <button
+                        onClick={handleExportCSV}
+                        disabled={channels.length === 0}
+                        className="w-full py-2.5 bg-purple-900/40 hover:bg-purple-900/70 border border-purple-800/30 text-purple-200 hover:text-white text-[11px] font-bold rounded-lg transition-colors uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>Download CSV Spreadsheet</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Card 4: XML TV EPG JSON State */}
+                  <div className="bg-[#10111a] border border-purple-950/20 rounded-xl p-5 shadow-xl flex flex-col justify-between space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between border-b border-purple-950/20 pb-2">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-purple-400" />
+                          <h3 className="text-xs font-black text-white uppercase tracking-wider">XML EPG Guide Listings</h3>
+                        </div>
+                        <span className="text-[9px] font-mono font-bold bg-purple-950/40 border border-purple-900/30 text-purple-400 px-2 py-0.5 rounded-full uppercase">
+                          epg.json
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 leading-relaxed font-sans">
+                        Exports the exact structural schedule lists, timeblocks, episode details, descriptions, and show durations in a structured JSON schema. Perfect for linking EPG guides with external streaming servers.
+                      </p>
+                    </div>
+
+                    <div className="pt-2">
+                      <button
+                        onClick={() => {
+                          try {
+                            const epgBlob = new Blob([JSON.stringify(channels, null, 2)], { type: 'application/json;charset=utf-8' });
+                            const url = URL.createObjectURL(epgBlob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = 'epg.json';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            logMessage('custom', '[EPG Export]: Downloaded "epg.json" schedule data grid successfully.');
+                          } catch (err: any) {
+                            logMessage('error', `Failed to export EPG schema: ${err.message}`);
+                          }
+                        }}
+                        disabled={channels.length === 0}
+                        className="w-full py-2.5 bg-purple-900/40 hover:bg-purple-900/70 border border-purple-800/30 text-purple-200 hover:text-white text-[11px] font-bold rounded-lg transition-colors uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>Download EPG Data JSON</span>
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Helpful deployment instructions */}
+                <div className="bg-purple-950/10 border border-purple-900/20 rounded-xl p-4.5 space-y-3 font-sans">
+                  <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <Info className="w-3.5 h-3.5 text-purple-400" />
+                    <span>How to publish your static player for free</span>
+                  </h4>
+                  <div className="text-[11px] text-gray-400 space-y-2 leading-relaxed">
+                    <p>
+                      Because the exported player page is <strong>100% self-contained</strong>, you can host your television network for free on any static host. No complex servers or GitHub Action pipelines required:
+                    </p>
+                    <ol className="list-decimal pl-4.5 space-y-1 text-gray-400">
+                      <li>Download the standalone <strong>index.html</strong> file above.</li>
+                      <li>Drop it into a fresh GitHub repository and enable <strong className="text-purple-300">GitHub Pages</strong> in settings, or upload it to <strong className="text-purple-300">Vercel</strong>, <strong className="text-purple-300">Netlify</strong>, or <strong className="text-purple-300">Cloudflare Pages</strong>.</li>
+                      <li>Alternatively, just double-click the <strong>index.html</strong> file on your desktop to play your TV matrix scheduled loops directly in your browser.</li>
+                    </ol>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          ) : workspaceTab === 'github' ? (
             <div className="flex-1 overflow-y-auto p-5 bg-[#08090c] scrollbar-thin space-y-5 text-left text-gray-200">
               {/* STATUS & FEEDBACK BANNER */}
               {(githubMessage || githubStatus === 'error') && (
-                <div className={`p-4 rounded-xl border flex items-start gap-3 text-xs leading-relaxed transition-all shadow-lg ${
+                <div className={`p-4 rounded-xl border flex flex-col gap-3 text-xs leading-relaxed transition-all shadow-lg ${
                   githubStatus === 'error'
                     ? 'bg-red-500/10 border-red-500/30 text-red-300'
-                    : 'bg-purple-950/20 border-purple-800/30 text-purple-300'
+                    : githubMessage.toLowerCase().includes('workflow_dispatch')
+                      ? 'bg-amber-950/25 border-amber-800/40 text-amber-300'
+                      : 'bg-purple-950/20 border-purple-800/30 text-purple-300'
                 }`}>
-                  <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${githubStatus === 'error' ? 'text-red-400' : 'text-purple-400'}`} />
-                  <div className="flex-1">
-                    <span className="font-bold uppercase font-mono block mb-1">
-                      {githubStatus === 'error' ? 'REST API error' : 'Sync Console Notification'}
-                    </span>
-                    <span>{githubMessage || 'Unknown error communicating with GitHub APIs.'}</span>
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${
+                      githubStatus === 'error' 
+                        ? 'text-red-400' 
+                        : githubMessage.toLowerCase().includes('workflow_dispatch')
+                          ? 'text-amber-400'
+                          : 'text-purple-400'
+                    }`} />
+                    <div className="flex-1">
+                      <span className="font-bold uppercase font-mono block mb-1">
+                        {githubStatus === 'error' 
+                          ? 'REST API error' 
+                          : githubMessage.toLowerCase().includes('workflow_dispatch')
+                            ? 'Trigger Missing: Workflow Dispatch Configuration Required'
+                            : 'Sync Console Notification'}
+                      </span>
+                      <span>{githubMessage || 'Unknown error communicating with GitHub APIs.'}</span>
+                    </div>
+                    <button 
+                      onClick={() => setGithubMessage('')} 
+                      className="text-[10px] font-mono hover:text-white px-2 py-0.5 rounded bg-black/40 border border-white/5 cursor-pointer shrink-0"
+                    >
+                      DISMISS
+                    </button>
                   </div>
-                  <button 
-                    onClick={() => setGithubMessage('')} 
-                    className="text-[10px] font-mono hover:text-white px-2 py-0.5 rounded bg-black/40 border border-white/5"
-                  >
-                    DISMISS
-                  </button>
+
+                  {githubMessage.toLowerCase().includes('workflow_dispatch') && (
+                    <div className="mt-1 p-4 bg-black/60 rounded-lg border border-amber-500/20 font-sans space-y-3.5">
+                      <div className="flex items-center gap-2 border-b border-amber-500/10 pb-2">
+                        <Code className="w-4 h-4 text-amber-400" />
+                        <h4 className="font-bold text-white text-xs uppercase tracking-wider">How to enable manual triggers</h4>
+                      </div>
+                      
+                      <p className="text-gray-400 text-[11px] leading-relaxed">
+                        To allow this dashboard to trigger workflows remotely, GitHub requires your workflow YAML definition to explicitly declare the <code className="text-amber-400 font-mono font-bold bg-white/5 px-1 py-0.5 rounded">workflow_dispatch</code> event trigger.
+                      </p>
+                      
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-mono text-gray-400 uppercase tracking-wider block">Add this block near the top of your YAML workflow file:</span>
+                        <div className="relative">
+                          <pre className="bg-black/90 p-3 rounded-lg text-[10.5px] font-mono text-emerald-400 border border-white/5 overflow-x-auto leading-normal whitespace-pre">
+{`on:
+  workflow_dispatch:  # <-- Allows manual remote execution via REST API / Web UI`}
+                          </pre>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText("on:\n  workflow_dispatch:");
+                              setYamlCopied(true);
+                              setTimeout(() => setYamlCopied(false), 2000);
+                            }}
+                            className="absolute right-2 top-2 px-2.5 py-1.5 bg-purple-950/40 hover:bg-purple-900/60 rounded text-[10px] text-purple-300 hover:text-white transition-all font-bold flex items-center gap-1 cursor-pointer border border-purple-800/20"
+                            title="Copy YAML trigger"
+                          >
+                            {yamlCopied ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-400" />
+                                <span className="text-emerald-400 font-mono">Copied!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3" />
+                                <span>Copy Trigger</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="text-[10px] text-gray-400 leading-relaxed space-y-1 bg-white/5 p-2.5 rounded-lg border border-white/5">
+                        <p className="font-semibold text-white">Follow these simple steps:</p>
+                        <ol className="list-decimal pl-4 space-y-1 text-gray-400">
+                          <li>Open your repository (e.g. <strong className="text-white">{githubRepo}</strong>) on GitHub or in your local IDE.</li>
+                          <li>Navigate to your workflow configuration file (usually inside <code className="font-mono text-purple-400 bg-white/5 px-1 py-0.2 rounded">.github/workflows/</code>, e.g., <code className="font-mono text-purple-400 bg-white/5 px-1 py-0.2 rounded">sync.yml</code>).</li>
+                          <li>Add the <code className="text-amber-400 font-mono font-bold">workflow_dispatch:</code> trigger block shown above under your <code className="font-mono">on:</code> definition.</li>
+                          <li>Commit and push the file to your <code className="font-mono text-purple-400 bg-white/5 px-1 py-0.2 rounded">{githubBranch}</code> branch.</li>
+                          <li>Refresh your active workflows list and click the <strong className="text-white">Trigger</strong> button again!</li>
+                        </ol>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2058,14 +3533,52 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                       <div className="space-y-1">
                         <label className="text-[10px] font-mono text-gray-400 uppercase tracking-wider block">Target Branch Name:</label>
                         <div className="relative">
-                          <GitBranch className="w-3.5 h-3.5 text-gray-500 absolute left-3 top-2.5" />
-                          <input
-                            type="text"
-                            value={githubBranch}
-                            onChange={(e) => setGithubBranch(e.target.value)}
-                            placeholder="main"
-                            className="w-full bg-black/50 border border-purple-950/50 hover:border-purple-800/50 focus:border-purple-600 focus:ring-1 focus:ring-purple-600 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white font-mono placeholder-gray-600 focus:outline-none"
-                          />
+                          <GitBranch className="w-3.5 h-3.5 text-gray-500 absolute left-3 top-2.5 z-10 pointer-events-none" />
+                          {!isCustomBranch ? (
+                            <div className="relative">
+                              <select
+                                value={githubBranch}
+                                onChange={(e) => {
+                                  if (e.target.value === 'custom') {
+                                    setIsCustomBranch(true);
+                                    setGithubBranch('');
+                                  } else {
+                                    setGithubBranch(e.target.value);
+                                  }
+                                }}
+                                className="w-full bg-black/50 border border-purple-950/50 hover:border-purple-800/50 focus:border-purple-600 focus:ring-1 focus:ring-purple-600 rounded-lg pl-9 pr-8 py-1.5 text-xs text-white font-mono focus:outline-none appearance-none cursor-pointer"
+                              >
+                                <option value="main" className="bg-[#10111a] text-white font-mono">main</option>
+                                <option value="dev" className="bg-[#10111a] text-white font-mono">dev</option>
+                                <option value="staging" className="bg-[#10111a] text-white font-mono">staging</option>
+                                <option value="custom" className="bg-[#10111a] text-purple-400 font-bold font-mono">Custom...</option>
+                              </select>
+                              <div className="absolute right-3 top-2.5 pointer-events-none text-gray-500">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex gap-1.5 items-center">
+                              <input
+                                type="text"
+                                value={githubBranch}
+                                onChange={(e) => setGithubBranch(e.target.value)}
+                                placeholder="Enter branch (e.g., feature-1)"
+                                className="w-full bg-black/50 border border-purple-950/50 hover:border-purple-800/50 focus:border-purple-600 focus:ring-1 focus:ring-purple-600 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white font-mono placeholder-gray-600 focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsCustomBranch(false);
+                                  setGithubBranch('main');
+                                }}
+                                className="px-2.5 py-1.5 bg-purple-950/40 hover:bg-purple-900/40 border border-purple-900/30 text-purple-400 hover:text-white rounded-lg text-[9px] font-mono tracking-wide font-bold uppercase transition-colors shrink-0 cursor-pointer"
+                                title="Switch back to preset dropdown"
+                              >
+                                Presets
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -2116,6 +3629,61 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                     </div>
 
                     <div className="space-y-4">
+                      {/* NEW: Automated All-in-One Deployment panel */}
+                      <div className="space-y-3 p-4 bg-gradient-to-br from-purple-950/30 to-purple-900/10 rounded-xl border border-purple-500/30 shadow-inner">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+                            <span className="text-[11px] font-extrabold text-white uppercase tracking-wider">⚡ Quick-Deploy Station</span>
+                          </div>
+                          <span className="text-[9px] font-mono font-bold bg-amber-500/10 border border-amber-500/30 text-amber-400 px-1.5 py-0.2 rounded uppercase">
+                            All-In-One
+                          </span>
+                        </div>
+                        
+                        <p className="text-[10px] text-gray-400 leading-normal font-sans">
+                          Sync playlist (<code className="text-purple-400 font-mono text-[9px]">{githubM3uSavePath}</code>) and player (<code className="text-purple-400 font-mono text-[9px]">{githubHtmlSavePath}</code>) to GitHub simultaneously, trigger active pipelines, and update your public player instantly.
+                        </p>
+
+                        <button
+                          onClick={quickSyncAndPublishAll}
+                          disabled={isGithubLoading || channels.length === 0}
+                          className="w-full py-2.5 bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-600 hover:to-indigo-700 text-white text-[11px] font-black rounded-lg transition-all uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                          <span>Sync & Auto-Publish Live Site</span>
+                        </button>
+
+                        {getGitHubPagesUrl() && (
+                          <div className="pt-2 border-t border-purple-950/30 flex flex-col gap-1 text-left">
+                            <span className="text-[9px] font-mono text-gray-500 uppercase tracking-wider">🚀 LIVE PUBLIC DOMAIN URL:</span>
+                            <div className="flex items-center justify-between gap-2 bg-black/40 p-2 rounded border border-white/5 overflow-hidden">
+                              <a
+                                href={getGitHubPagesUrl() || '#'}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[11px] font-mono font-medium text-purple-300 hover:text-white transition-colors truncate hover:underline"
+                              >
+                                {getGitHubPagesUrl()}
+                              </a>
+                              <button
+                                onClick={() => {
+                                  const url = getGitHubPagesUrl();
+                                  if (url) {
+                                    navigator.clipboard.writeText(url);
+                                    logMessage('custom', `Copied live deployment link: ${url}`);
+                                  }
+                                }}
+                                className="text-[9px] font-mono text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 px-1.5 py-0.5 rounded cursor-pointer border border-white/5 flex items-center gap-1 shrink-0"
+                              >
+                                <Copy className="w-2.5 h-2.5" />
+                                <span>Copy</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
                       {/* Sub-item: M3U playlist publisher */}
                       <div className="space-y-2 p-3 bg-black/20 rounded-lg border border-purple-950/20">
                         <div className="flex items-center justify-between">
@@ -2182,6 +3750,64 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                             </a>
                           </div>
                         )}
+                      </div>
+
+                      {/* Sub-item: EPG state publisher */}
+                      <div className="space-y-2 p-3 bg-black/20 rounded-lg border border-purple-950/20">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">EPG State Save Path:</span>
+                          <span className="text-[9px] font-mono text-gray-500">JSON File</span>
+                        </div>
+                        <input
+                          type="text"
+                          value={githubEpgSavePath}
+                          onChange={(e) => handleEpgSavePathChange(e.target.value)}
+                          className="w-full bg-black/50 border border-purple-950/40 rounded px-2.5 py-1 text-xs text-gray-300 font-mono focus:outline-none focus:border-purple-600"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => fetchAndLoadEpgFromPath(githubEpgSavePath)}
+                            disabled={isGithubLoading}
+                            className="py-1.5 bg-[#12131a] hover:bg-[#1a1c29] border border-gray-800 text-gray-300 hover:text-white text-[10px] font-bold rounded transition-colors uppercase tracking-wider flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
+                            title="Load and sync EPG guide state from your GitHub repository"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 text-blue-400 ${isGithubLoading ? 'animate-spin' : ''}`} />
+                            <span>Sync Load EPG</span>
+                          </button>
+                          <button
+                            onClick={() => saveEPGToGithub(githubEpgSavePath)}
+                            disabled={isGithubLoading || channels.length === 0}
+                            className="py-1.5 bg-purple-900/40 hover:bg-purple-900/70 border border-purple-800/30 text-purple-200 hover:text-white text-[10px] font-bold rounded transition-colors uppercase tracking-wider flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
+                            title="Commit current EPG program states to GitHub JSON"
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Commit EPG</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Sub-item: Push Full Codebase to GitHub */}
+                      <div className="space-y-2 p-3 bg-purple-950/10 hover:bg-purple-950/20 rounded-lg border border-purple-500/20 shadow-inner transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1">
+                            <Code className="w-3.5 h-3.5 text-purple-400" />
+                            <span className="text-[10px] font-bold text-purple-300 uppercase tracking-wider">Sync Full App Codebase:</span>
+                          </div>
+                          <span className="text-[8px] font-mono font-bold bg-purple-500/10 border border-purple-500/30 text-purple-300 px-1 py-0.2 rounded uppercase">
+                            M3U Pro Core
+                          </span>
+                        </div>
+                        <p className="text-[9px] text-gray-500 leading-normal font-sans text-left">
+                          Push all updated source files (<code className="text-gray-400">src/</code>, <code className="text-gray-400">server.ts</code>, workflows, config) to the branch <code className="text-purple-400 font-mono font-bold">{githubBranch}</code>.
+                        </p>
+                        <button
+                          onClick={pushCodebaseToGithub}
+                          disabled={isGithubLoading}
+                          className="w-full py-1.5 bg-gradient-to-r from-purple-950/60 to-indigo-950/60 hover:from-purple-900/80 hover:to-indigo-900/80 border border-purple-500/30 text-purple-100 hover:text-white text-[10px] font-bold rounded transition-all uppercase tracking-wider flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer shadow active:scale-[0.98]"
+                        >
+                          <Upload className="w-3.5 h-3.5 animate-pulse text-purple-400" />
+                          <span>Push Latest Codebase</span>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -2322,6 +3948,7 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                           const isDir = file.type === 'dir';
                           const name = file.name;
                           const isM3u = name.endsWith('.m3u') || name.endsWith('.m3u8') || name.endsWith('.txt');
+                          const isJson = name.endsWith('.json');
                           
                           return (
                             <div key={file.sha} className="p-2.5 bg-black/25 hover:bg-[#12131b]/50 border border-purple-950/5 rounded-lg flex items-center justify-between gap-3 transition-colors">
@@ -2364,6 +3991,15 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                                         Import
                                       </button>
                                     )}
+                                    {isJson && (
+                                      <button
+                                        onClick={() => loadEPGFromGithub(file.download_url, file.name)}
+                                        className="px-2.5 py-1 bg-purple-950/35 border border-purple-900/40 text-purple-300 hover:bg-purple-900/30 text-[10px] rounded transition-colors uppercase font-bold cursor-pointer"
+                                        title="Import EPG State into local workspace"
+                                      >
+                                        Load EPG
+                                      </button>
+                                    )}
                                   </>
                                 )}
                               </div>
@@ -2382,11 +4018,24 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
 
               </div>
             </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto p-5 bg-[#08090c] scrollbar-thin text-left text-gray-200">
+              <ScraperDashboard 
+                onLogEvent={handleScraperLogEvent}
+                onRefreshChannels={refreshChannels}
+                onSelectChannel={(channelId) => {
+                  const ch = channels.find(c => c.id === channelId);
+                  if (ch) {
+                    handleSelectChannel(ch);
+                  }
+                }}
+              />
+            </div>
           )}
         </div>
 
         {/* RIGHT SIDEBAR / SPLIT TUNER PORTAL */}
-        <aside className="w-full lg:w-[400px] xl:w-[440px] border-t lg:border-t-0 lg:border-l border-purple-950/30 bg-[#0f1015]/60 flex flex-col lg:shrink-0 h-[520px] lg:h-full overflow-hidden">
+        <aside className="console-right-panel visible w-full lg:w-[400px] xl:w-[440px] border-t lg:border-t-0 lg:border-l border-purple-950/30 bg-[#0f1015]/60 flex flex-col lg:shrink-0 h-[520px] lg:h-full overflow-hidden">
           
           {/* Gold Web Live Player area */}
           <div className="p-4 border-b border-purple-950/30 bg-black/40">
@@ -2399,10 +4048,15 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                 <CustomVideoPlayer
                   episode={selectedEpisode}
                   show={selectedShow}
+                  channelId={selectedChannel?.id || ''}
                   channelName={selectedChannel?.name || 'Tuner Deck'}
                   isLiveMode={isLiveMode}
                   liveSeekOffset={liveSeekOffset}
                   onLogEvent={logMessage}
+                  onEpisodeEnded={handleEpisodeEnded}
+                  schedulingMode={schedulingMode}
+                  onDurationProbed={refreshChannels}
+                  nextEpisode={activeChannelEpg?.upcomingSlots?.[0]?.episode}
                 />
               ) : (
                 <div className="aspect-video bg-black rounded-lg flex items-center justify-center text-gray-600 font-mono text-xs p-4 text-center">
@@ -2433,12 +4087,50 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                 </button>
               </div>
             </div>
+
+            {isLiveMode && (
+              <div className="mt-3.5 pt-3 border-t border-purple-950/20 flex flex-col gap-1.5">
+                <span className="text-[10px] font-mono text-purple-400/70 font-bold uppercase tracking-wider">
+                  EPG PLAYBACK SCHEDULER:
+                </span>
+                <div className="grid grid-cols-2 gap-1.5 bg-black/40 border border-purple-950/20 rounded-xl p-1">
+                  <button
+                    onClick={() => {
+                      setSchedulingMode('hard-clocked');
+                      logMessage('custom', 'Playout Engine shifted: Hard-Clocked Mode (Shows loop inside fixed hour slots to fill dead air)');
+                    }}
+                    className={`flex flex-col items-center justify-center p-2 rounded-lg text-center transition-all cursor-pointer ${
+                      schedulingMode === 'hard-clocked'
+                        ? 'bg-purple-900/40 border border-purple-500/50 text-white'
+                        : 'border border-transparent text-gray-500 hover:text-gray-300'
+                    }`}
+                  >
+                    <span className="text-[10px] font-black uppercase tracking-wider">HARD-CLOCKED</span>
+                    <span className="text-[8px] opacity-60">Loops to Fill Dead Air</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSchedulingMode('continuous');
+                      logMessage('custom', 'Playout Engine shifted: Continuous Mode (Adjusts clock to video length for end-to-end continuous playback)');
+                    }}
+                    className={`flex flex-col items-center justify-center p-2 rounded-lg text-center transition-all cursor-pointer ${
+                      schedulingMode === 'continuous'
+                        ? 'bg-purple-900/40 border border-purple-500/50 text-white'
+                        : 'border border-transparent text-gray-500 hover:text-gray-300'
+                    }`}
+                  >
+                    <span className="text-[10px] font-black uppercase tracking-wider">CONTINUOUS</span>
+                    <span className="text-[8px] opacity-60">End-to-End Gapless Stream</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Real-time Diagnostics Monitor Console */}
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="flex-1 overflow-hidden p-3 bg-black/10">
-              <DiagnosticConsole logs={logs} onClearLogs={handleClearLogs} />
+              <DiagnosticConsole logs={logs} onClearLogs={handleClearLogs} onRunChannelHopTest={handleRunChannelHopTest} />
             </div>
           </div>
         </aside>
@@ -2707,13 +4399,13 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                 <button
                   type="button"
                   onClick={() => {
-                    handleAutoScheduleClassicCinema();
                     setShowTvGuideModal(false);
+                    setShowAutoSchedulerModal(true);
                   }}
                   className="w-full py-1.5 bg-purple-700 hover:bg-purple-600 border border-purple-600 text-white text-xs font-bold rounded-md transition-colors uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: '4s' }} />
-                  <span>Build Round-Robin Schedule Now</span>
+                  <span>Configure & Build Smart Schedule</span>
                 </button>
               </div>
             )}
@@ -2793,6 +4485,234 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
         </div>
       )}
 
+      {/* 9. MODAL: ADVANCED AUTO-SCHEDULER CONFIGURATOR */}
+      {showAutoSchedulerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fade-in">
+          <div className="bg-[#0f1016] border border-purple-500/30 rounded-2xl p-6 max-w-lg w-full flex flex-col gap-5 shadow-2xl shadow-purple-950/40 text-left">
+            <div className="flex items-center justify-between border-b border-purple-950/40 pb-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-purple-400 animate-pulse" />
+                <div>
+                  <h3 className="font-black text-white text-sm uppercase tracking-wider">
+                    Auto-Schedule Matrix Designer
+                  </h3>
+                  <p className="text-[10px] text-gray-500 font-mono">
+                    Thematic Rotation Engine • Classic Cinema Loop
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAutoSchedulerModal(false)}
+                className="text-gray-400 hover:text-white bg-black/40 hover:bg-black/80 rounded-full w-6 h-6 flex items-center justify-center transition-colors cursor-pointer text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* Category Toggles Section */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] text-purple-400 font-mono uppercase tracking-wider font-bold">
+                    1. Included Genres & Channels Pool
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSchedulerSelectedGenres(['TV Shows', 'Movies', 'Westerns', 'News', 'Crime Shows'])}
+                      className="text-[9px] font-mono text-purple-300 hover:text-white bg-purple-950/40 px-2 py-0.5 rounded border border-purple-900/30 cursor-pointer"
+                    >
+                      SELECT ALL
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSchedulerSelectedGenres([])}
+                      className="text-[9px] font-mono text-gray-400 hover:text-white bg-gray-900 px-2 py-0.5 rounded border border-gray-800 cursor-pointer"
+                    >
+                      DESELECT ALL
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 bg-black/40 rounded-xl border border-purple-950/30">
+                  {['TV Shows', 'Movies', 'Westerns', 'News', 'Crime Shows'].map((genre) => {
+                    const isChecked = schedulerSelectedGenres.includes(genre);
+                    return (
+                      <label
+                        key={genre}
+                        className={`flex items-center gap-2 p-2 rounded-lg border text-[11px] font-sans font-medium transition-all cursor-pointer ${
+                          isChecked
+                            ? 'bg-purple-950/30 border-purple-800/60 text-purple-200'
+                            : 'bg-[#121319]/50 border-gray-900 text-gray-500 hover:border-gray-800'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSchedulerSelectedGenres((prev) => [...prev, genre]);
+                            } else {
+                              setSchedulerSelectedGenres((prev) => prev.filter((g) => g !== genre));
+                            }
+                          }}
+                          className="rounded text-purple-600 focus:ring-purple-500 h-3.5 w-3.5 accent-purple-600 cursor-pointer"
+                        />
+                        <span>{genre}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-[9px] text-gray-500 leading-normal italic">
+                  Note: Deselecting 'Westerns' or 'Crime Shows' will intelligently filter out and skip all Western/Crime programs during round-robin distribution.
+                </p>
+              </div>
+
+              {/* Block Layout Selection */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-purple-400 font-mono uppercase tracking-wider font-bold">
+                  2. Block Rotation Layout
+                </label>
+                <div className="relative">
+                  <select
+                    value={schedulerBlockLayout}
+                    onChange={(e) => setSchedulerBlockLayout(e.target.value)}
+                    className="w-full bg-black border border-purple-950/50 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-purple-600 appearance-none cursor-pointer font-mono"
+                  >
+                    <option value="1">1 Hour Layout Blocks (Frequent Shuffling)</option>
+                    <option value="2">2 Hour Layout Blocks</option>
+                    <option value="4">4 Hour Layout Blocks (Default Standard)</option>
+                    <option value="6">6 Hour Layout Blocks (Classic Broadcaster)</option>
+                    <option value="8">8 Hour Layout Blocks</option>
+                    <option value="12">12 Hour Layout Blocks (Day/Night Halves)</option>
+                    <option value="24">24 Hour Layout Block (Full-Day Theme loop)</option>
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-purple-400">
+                    ▼
+                  </div>
+                </div>
+              </div>
+
+              {/* Daily Theme Mix Selector */}
+              <div className="space-y-2">
+                <label className="text-[10px] text-purple-400 font-mono uppercase tracking-wider font-bold">
+                  3. Theme Mix Schedule Assignments (24h Clock Lineups)
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-black/40 rounded-xl border border-purple-950/30">
+                  
+                  {/* Morning Block */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-gray-400 font-mono uppercase">
+                      🌅 Morning (06:00 - 12:00)
+                    </label>
+                    <select
+                      value={schedulerMorningTheme}
+                      onChange={(e) => setSchedulerMorningTheme(e.target.value)}
+                      className="w-full bg-black/60 border border-purple-950/40 rounded-md p-1.5 text-[11px] text-gray-200 focus:outline-none focus:border-purple-600 cursor-pointer"
+                    >
+                      <option value="All">All Mix (Round-Robin)</option>
+                      <option value="Westerns">Westerns Theme 🤠</option>
+                      <option value="Crime Shows">Crime Shows 🔍</option>
+                      <option value="TV Shows">TV Shows Mix 📺</option>
+                      <option value="Movies">Movies Feature 🎬</option>
+                      <option value="News">News Block 📰</option>
+                    </select>
+                  </div>
+
+                  {/* Afternoon Block */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-gray-400 font-mono uppercase">
+                      ☀️ Afternoon (12:00 - 18:00)
+                    </label>
+                    <select
+                      value={schedulerAfternoonTheme}
+                      onChange={(e) => setSchedulerAfternoonTheme(e.target.value)}
+                      className="w-full bg-black/60 border border-purple-950/40 rounded-md p-1.5 text-[11px] text-gray-200 focus:outline-none focus:border-purple-600 cursor-pointer"
+                    >
+                      <option value="All">All Mix (Round-Robin)</option>
+                      <option value="Westerns">Westerns Theme 🤠</option>
+                      <option value="Crime Shows">Crime Shows 🔍</option>
+                      <option value="TV Shows">TV Shows Mix 📺</option>
+                      <option value="Movies">Movies Feature 🎬</option>
+                      <option value="News">News Block 📰</option>
+                    </select>
+                  </div>
+
+                  {/* Evening Block */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-gray-400 font-mono uppercase">
+                      🌌 Evening (18:00 - 24:00)
+                    </label>
+                    <select
+                      value={schedulerEveningTheme}
+                      onChange={(e) => setSchedulerEveningTheme(e.target.value)}
+                      className="w-full bg-black/60 border border-purple-950/40 rounded-md p-1.5 text-[11px] text-gray-200 focus:outline-none focus:border-purple-600 cursor-pointer"
+                    >
+                      <option value="All">All Mix (Round-Robin)</option>
+                      <option value="Westerns">Westerns Theme 🤠</option>
+                      <option value="Crime Shows">Crime Shows 🔍</option>
+                      <option value="TV Shows">TV Shows Mix 📺</option>
+                      <option value="Movies">Movies Feature 🎬</option>
+                      <option value="News">News Block 📰</option>
+                    </select>
+                  </div>
+
+                  {/* Late Night Block */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-gray-400 font-mono uppercase">
+                      🌙 Late Late Show (00:00 - 06:00)
+                    </label>
+                    <select
+                      value={schedulerLateLateTheme}
+                      onChange={(e) => setSchedulerLateLateTheme(e.target.value)}
+                      className="w-full bg-black/60 border border-purple-950/40 rounded-md p-1.5 text-[11px] text-gray-200 focus:outline-none focus:border-purple-600 cursor-pointer"
+                    >
+                      <option value="All">All Mix (Round-Robin)</option>
+                      <option value="Westerns">Westerns Theme 🤠</option>
+                      <option value="Crime Shows">Crime Shows 🔍</option>
+                      <option value="TV Shows">TV Shows Mix 📺</option>
+                      <option value="Movies">Movies Feature 🎬</option>
+                      <option value="News">News Block 📰</option>
+                    </select>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-purple-950/20">
+              <button
+                type="button"
+                onClick={() => setShowAutoSchedulerModal(false)}
+                className="px-4 py-2 bg-gray-950 hover:bg-gray-900 rounded-lg text-xs font-bold text-gray-400 hover:text-white transition-colors cursor-pointer border border-gray-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleAutoScheduleClassicCinema();
+                  setShowAutoSchedulerModal(false);
+                }}
+                className="px-5 py-2 bg-gradient-to-r from-purple-800 to-indigo-800 hover:from-purple-700 hover:to-indigo-700 text-xs font-bold text-white rounded-lg transition-all cursor-pointer active:scale-95 shadow-md shadow-purple-500/10 flex items-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-purple-300 animate-pulse" />
+                <span>Generate Smart Theme Schedule</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Commercial & Interstitial Fill Modal */}
+      <CommercialFillModal
+        isOpen={showCommercialModal}
+        onClose={() => setShowCommercialModal(false)}
+        onLogEvent={logMessage}
+        onRefreshSchedule={refreshChannels}
+      />
+        </div>
+      )}
     </div>
   );
 }

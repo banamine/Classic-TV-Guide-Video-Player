@@ -1,1 +1,225 @@
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Core Web Vitals Phase 1: Layout Instability Prevention (CLS < 0.1) */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Inter'), local('sans-serif');
+  size-adjust: 100%;
+  ascent-override: 90%;
+  descent-override: 20%;
+}
+
+/* Reserved slots for dynamic banners and top notification overlays */
+.console-right-panel {
+  will-change: transform, opacity;
+  transform: translateX(100%);
+  opacity: 0;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+}
+
+.console-right-panel.visible {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.video-player-container {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  background-color: #000; /* Prevents visual flash during stream swap */
+  contain: strict; /* Prevents internal player layout changes from shifting outer page */
+}
+
+.cookie-notification-bar-container {
+  min-height: 52px;
+  contain: layout size;
+  contain-intrinsic-size: 0px 52px;
+}
+
+/* Prevent layout shifts from custom prompt / card components */
+.card-description-container {
+  min-height: 120px;
+  contain: layout;
+}
+
+/* Intrinsic sizing & layout containment for video player & EPG components */
+.player-container-slot {
+  min-height: 360px;
+  contain: layout style;
+  aspect-ratio: 16 / 9;
+}
+
+.epg-slot-card,
+.epg-channel-row,
+.epg-schedule-card {
+  min-height: 60px;
+  contain: layout style;
+  content-visibility: auto;
+  contain-intrinsic-size: 0px 60px;
+}
+
+/* Base Layer: completely uninterrupted edge-to-edge backdrop */
+#video-canvas-container {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 1 !important;
+  background-color: #000000 !important;
+  overflow: hidden !important;
+}
+
+
+#video-canvas-container video,
+div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div#video-canvas-container:nth-of-type(1) > video#main-player:nth-of-type(1) {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  background-color: #000000 !important;
+}
+
+/* Sliding Left Channel Menu */
+.station-directory-drawer {
+  position: fixed;
+  top: 0;
+  left: -320px; /* Hidden off-screen by default */
+  width: 300px;
+  height: 100vh;
+  z-index: 100; /* Higher z-index to overlay backdrop and floaters */
+  background: rgba(10, 8, 16, 0.85);
+  backdrop-filter: blur(16px); /* Optimized GPU Glassmorphism */
+  -webkit-backdrop-filter: blur(16px);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Open state triggered via JavaScript class toggle */
+.station-directory-drawer.is-open {
+  transform: translateX(320px) translateZ(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Floating Bottom TV Guide Overlay */
+.floating-epg-guide {
+  position: fixed;
+  bottom: -250px; /* Parks safely below viewport */
+  left: 5%;
+  width: 90%;
+  height: 220px;
+  z-index: 90;
+  background: rgba(10, 8, 16, 0.8);
+  backdrop-filter: blur(16px); /* Optimized GPU Glassmorphism */
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 16px 16px 0 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
+  transition: transform 0.45s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.3s ease;
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.floating-epg-guide.is-visible {
+  transform: translateY(-250px) translateZ(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Container Optimization Strategy: Promote container to its own compositor layer to prevent repainting */
+.banner-and-app-container {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* Hitboxes / Trigger Zones */
+.hover-hitbox-left {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 30px;
+  height: 100vh;
+  z-index: 50;
+  background: transparent;
+  pointer-events: auto;
+}
+
+.hover-hitbox-bottom {
+  position: fixed;
+  bottom: 0;
+  left: 5%;
+  width: 90%;
+  height: 35px;
+  z-index: 50;
+  background: transparent;
+  pointer-events: auto;
+}
+
+/* Horizontal Scroll Timeline with scroll snapping */
+.timeline-horizontal-container {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Hide scrollbar for clean cinema look */
+}
+
+.timeline-horizontal-container::-webkit-scrollbar {
+  display: none;
+}
+
+.timeline-slot-card {
+  scroll-snap-align: start;
+  flex: 0 0 auto;
+}
+
+/* Standardized Dual-Player Video Transitions & Hardware GPU Promotion */
+.video-player-instance {
+  will-change: opacity, transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+video#player-a,
+video#player-b,
+.video-player-instance {
+  transition: opacity 0.5s ease-in-out;
+}
+
+video.video-inactive,
+.video-inactive {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+  z-index: 0 !important;
+}
+
+video.video-active,
+.video-active {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+  z-index: 10 !important;
+}
+
+/* Custom fade effects */
+.overlay-fade-transition {
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+

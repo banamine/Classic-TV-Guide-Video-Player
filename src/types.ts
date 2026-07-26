@@ -9,6 +9,22 @@ export interface Episode {
   season?: string;
   episodeNumber?: string;
   url: string;
+  subtitleUrl?: string;
+  thumbnailUrl?: string;
+  // Enriched metadata from scrapers & Gemini API
+  funFact?: string;
+  runtimeMins?: number;
+  durationMs?: number;  // Crucial: Holds precision M3U stream runtime lengths
+  isFiller?: boolean;
+  estimatedSizeGb?: number;
+  meta?: Record<string, any>;
+}
+
+export interface SubtitleCue {
+  id: string;
+  start: number; // in seconds
+  end: number;   // in seconds
+  text: string;
 }
 
 export interface Show {
@@ -19,6 +35,13 @@ export interface Show {
   genre: string;
   episodes: Episode[];
   bannerUrl?: string;
+  // Enriched cast listings from scrapers & Gemini API
+  cast?: Array<{
+    name: string;
+    character: string;
+    bio: string;
+    imageUrl: string;
+  }>;
 }
 
 export interface Channel {
@@ -35,6 +58,9 @@ export interface Channel {
   customTags?: Record<string, string>; // Support for non-standard M3U tags
   status?: 'working' | 'broken' | 'unchecked' | 'checking'; // Validation status
   logoUrl?: string; // tvg-logo or logo image URL
+  m3uUrl?: string; // M3U playlist file path or URL
+  favorite?: boolean; // User favorite channel status
+  isWestern?: boolean; // Western channel indicator
 }
 
 export interface PlaybackLog {

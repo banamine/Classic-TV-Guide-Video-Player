@@ -1,6 +1,6 @@
 {
-  "name": "Classic TV Guide & Video Player",
-  "description": "An elegant dual-player classic TV guide and on-demand streaming network.",
+  "name": "Classic TV Guide & News Player",
+  "description": "A fluid, ultra-fast, cinema-first auto-scheduled TV guide and on-demand streaming network with glassy overlays and professional playlist workspace.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

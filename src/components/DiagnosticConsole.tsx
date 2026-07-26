@@ -10,9 +10,10 @@ import { Terminal, Trash2, ShieldCheck, Activity } from 'lucide-react';
 interface DiagnosticConsoleProps {
   logs: PlaybackLog[];
   onClearLogs: () => void;
+  onRunChannelHopTest?: () => void;
 }
 
-export function DiagnosticConsole({ logs, onClearLogs }: DiagnosticConsoleProps) {
+export function DiagnosticConsole({ logs, onClearLogs, onRunChannelHopTest }: DiagnosticConsoleProps) {
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -21,7 +22,7 @@ export function DiagnosticConsole({ logs, onClearLogs }: DiagnosticConsoleProps)
   }, [logs]);
 
   return (
-    <div id="diagnostic-console" className="hidden bg-[#0a0a0a] border border-white/10 rounded-lg p-4 font-mono text-[11px] text-gray-300 flex flex-col h-full min-h-[280px]">
+    <div id="diagnostic-console" className="bg-[#0a0a0a] border border-white/10 rounded-lg p-4 font-mono text-[11px] text-gray-300 flex flex-col h-full min-h-[280px]">
       {/* Console Header */}
       <div className="flex items-center justify-between border-b border-white/5 pb-2 mb-3">
         <div className="flex items-center gap-2 text-white/80">
@@ -32,15 +33,28 @@ export function DiagnosticConsole({ logs, onClearLogs }: DiagnosticConsoleProps)
             Live Logs
           </span>
         </div>
-        <button
-          onClick={onClearLogs}
-          className="text-white/40 hover:text-red-400 p-1 rounded hover:bg-white/5 transition-colors flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider cursor-pointer"
-          title="Clear Diagnostic Log"
-          id="btn-clear-logs"
-        >
-          <Trash2 className="w-3 h-3" />
-          <span>Clear</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {onRunChannelHopTest && (
+            <button
+              onClick={onRunChannelHopTest}
+              className="text-[#8c5cd0] hover:text-purple-300 bg-purple-950/40 border border-purple-500/30 px-2 py-0.5 rounded hover:bg-purple-900/40 transition-colors flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider cursor-pointer"
+              title="Run Channel Hop Test"
+              id="btn-run-channel-hop-test"
+            >
+              <Activity className="w-3 h-3 text-purple-400" />
+              <span>Hop Test</span>
+            </button>
+          )}
+          <button
+            onClick={onClearLogs}
+            className="text-white/40 hover:text-red-400 p-1 rounded hover:bg-white/5 transition-colors flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider cursor-pointer"
+            title="Clear Diagnostic Log"
+            id="btn-clear-logs"
+          >
+            <Trash2 className="w-3 h-3" />
+            <span>Clear</span>
+          </button>
+        </div>
       </div>
 
       {/* Terminal Output */}

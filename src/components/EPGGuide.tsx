@@ -121,7 +121,7 @@ export function EPGGuide({
   onLogEvent,
   isLoading = false,
 }: EPGGuideProps) {
-  const [activeCategory, setActiveCategory] = useState<'All' | 'TV Shows' | 'Movies' | 'Sports' | 'News' | 'Kids'>('All');
+  const [activeCategory, setActiveCategory] = useState<'All' | 'TV Shows' | 'Movies' | 'Westerns' | 'News' | 'Crime Shows'>('All');
   const [isMoreChannelsExpanded, setIsMoreChannelsExpanded] = useState(false);
   const [isLocalLoading, setIsLocalLoading] = useState(true);
 
@@ -135,13 +135,13 @@ export function EPGGuide({
   }, [channels]);
 
   // List of categories matching channel-sort-item class requirements
-  const categories: Array<'All' | 'TV Shows' | 'Movies' | 'Sports' | 'News' | 'Kids'> = [
+  const categories: Array<'All' | 'TV Shows' | 'Movies' | 'Westerns' | 'News' | 'Crime Shows'> = [
     'All',
     'TV Shows',
     'Movies',
-    'Sports',
+    'Westerns',
     'News',
-    'Kids',
+    'Crime Shows',
   ];
 
   // Filter channels based on categories
@@ -285,15 +285,23 @@ export function EPGGuide({
                         id={`live-slot-${ch.id}`}
                       >
                         <div className="flex items-center gap-2">
-                          <span className="text-[9px] font-mono font-bold text-red-500 bg-red-950/40 border border-red-500/20 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                            LIVE
-                          </span>
+                          {liveInfo.currentSlot?.isCommercialFill ? (
+                            <span className="text-[9px] font-mono font-bold text-amber-400 bg-amber-950/40 border border-amber-500/20 px-1.5 py-0.5 rounded uppercase tracking-wider animate-pulse">
+                              COMMERCIAL BREAK
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-mono font-bold text-red-500 bg-red-950/40 border border-red-500/20 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                              LIVE
+                            </span>
+                          )}
                           <div className="text-left">
                             <p className="text-xs font-bold">
                               {liveInfo.show.title}: {liveInfo.episode.title}
                             </p>
                             <p className="text-[9px] text-white/40 font-mono mt-0.5">
-                              S{liveInfo.episode.season || '01'} EP{liveInfo.episode.episodeNumber || '01'} • Scheduling Block
+                              {liveInfo.currentSlot?.isCommercialFill
+                                ? 'Grid Alignment Interstitial • Vintage Commercial'
+                                : `S${liveInfo.episode.season || '01'} EP${liveInfo.episode.episodeNumber || '01'} • Scheduling Block`}
                             </p>
                           </div>
                         </div>
