@@ -1,19 +1,693 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vintage TV Guide & VOD Network</title>
-    <!-- Preload key web fonts & enforce font-display: swap to prevent FOIT and CLS -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="preconnect" href="https://archive.org" crossorigin />
-    <link rel="dns-prefetch" href="https://archive.org" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Classic TV Guide & Video Player - Cinema Live Player</title>
+  
+  <!-- Preconnect and Preload to increase network priority and avoid render delays -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  
+  <!-- Preload Hls.js script for high-priority loading -->
+  <link rel="preload" href="https://cdn.jsdelivr.net/npm/hls.js@1.4.0/dist/hls.min.js" as="script">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com" defer></script>
+  
+  <!-- Load HLS.js from CDN synchronously to guarantee availability before player scripts run -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.0/dist/hls.min.js"></script>
+  
+  <!-- Synchronous local fallback if CDN fails to load -->
+  <script>
+    if (typeof Hls === 'undefined') {
+      console.warn('CDN hls.js failed. Falling back to local hls.min.js...');
+      var fallback = document.createElement('script');
+      fallback.src = 'hls.min.js';
+      fallback.async = false;
+      document.head.appendChild(fallback);
+    }
+  </script>
+  
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght=400;500;600;700;800;900&family=JetBrains+Mono:wght=400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #050508;
+      color: #f3f4f6;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      position: relative;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    /* Static CSS overrides for instant render of the splash state */
+    #player-splash {
+      position: absolute;
+      inset: 0;
+      background-color: rgba(7, 7, 10, 0.95);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 25;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      text-align: center;
+      transition: all 0.5s ease;
+    }
+    #player-splash .splash-box {
+      text-align: center;
+      position: relative;
+      z-index: 20;
+      padding: 2rem 1.5rem;
+      border-radius: 1rem;
+      max-width: 28rem;
+      background-color: #111116;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    #btn-start-play {
+      margin-top: 1.5rem;
+      padding: 0.625rem 1.5rem;
+      background-color: #9333ea;
+      color: #ffffff;
+      font-size: 0.75rem;
+      font-weight: 900;
+      border-radius: 9999px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      border: 1px solid rgba(168, 85, 247, 0.2);
+      box-shadow: 0 10px 15px -3px rgba(147, 51, 234, 0.3);
+      transition: all 0.2s ease;
+    }
+    #btn-start-play:hover {
+      background-color: #a855f7;
+    }
+    /* Scrollbar Utilities */
+    .scrollbar-none::-webkit-scrollbar {
+      display: none;
+    }
+    .scrollbar-none {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+  </style>
+</head>
+<body class="bg-[#050508] text-gray-100 flex flex-col h-screen w-screen overflow-hidden relative select-none">
+
+  <!-- Ambient Glow Backing Layer -->
+  <div id="ambient-backdrop-glow" class="absolute inset-0 pointer-events-none transition-all duration-1000 opacity-20 filter blur-[28px] transform-gpu z-0"></div>
+
+  <!-- MAIN VIDEO CANVAS WRAPPER -->
+  <div id="video-canvas-container" class="absolute inset-0 w-full h-full bg-black overflow-hidden flex flex-col justify-between z-[1]">
+    
+    <!-- HTML5 Video Element -->
+    <video id="video-element" class="absolute inset-0 w-full h-full object-contain cursor-pointer transition-all duration-500" playsinline controls></video>
+
+    <!-- Tap to Unmute Floating Banner -->
+    <div id="unmute-banner" class="fixed top-20 left-1/2 -translate-x-1/2 z-30 bg-purple-600/90 hover:bg-purple-500 backdrop-blur-md text-white text-[10px] font-black tracking-widest px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 border border-purple-400/20 cursor-pointer opacity-0 transition-all duration-500 scale-95 uppercase" style="pointer-events: none;">
+      <svg class="w-3.5 h-3.5 text-white animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+      </svg>
+      <span>MUTED BROADCAST • TAP TO UNMUTE</span>
+    </div>
+
+    <!-- Centered Buffering Spinner Overlay -->
+    <div id="buffer-spinner" class="absolute inset-0 z-[12] flex flex-col items-center justify-center bg-black/40 backdrop-blur-[2px] opacity-0 pointer-events-none transition-opacity duration-300">
+      <div class="flex flex-col items-center gap-3 p-4 bg-black/80 border border-white/10 rounded-2xl shadow-2xl">
+        <div class="relative w-10 h-10">
+          <div class="absolute inset-0 rounded-full border-2 border-white/5"></div>
+          <div id="buffer-ring" class="absolute inset-0 rounded-full border-2 border-t-purple-500 border-r-transparent border-b-transparent border-l-transparent animate-spin"></div>
+        </div>
+        <div class="text-center">
+          <p id="buffer-title" class="text-[10px] font-mono font-black text-white uppercase tracking-widest animate-pulse">Buffering Stream</p>
+          <p id="buffer-desc" class="text-[9px] font-mono text-white/40 mt-0.5 uppercase tracking-wider">Awaiting Stream Packets...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Branding Splash Screen -->
+    <div id="player-splash" class="absolute inset-0 bg-[#07070a]/95 backdrop-blur-md z-[25] flex flex-col items-center justify-center p-6 text-center transition-all duration-500">
+      <div class="absolute inset-0 bg-gradient-to-tr from-purple-950/10 via-transparent to-transparent pointer-events-none opacity-40"></div>
+      
+      <div class="splash-box text-center relative z-20 px-6 py-8 rounded-2xl max-w-md bg-[#111116] border border-white/5 shadow-2xl">
+        <div class="inline-flex items-center justify-center p-3.5 bg-black border border-purple-500/20 rounded-full mb-4 animate-bounce">
+          <svg class="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"></path>
+          </svg>
+        </div>
+        <h2 id="splash-channel-name" class="text-lg font-black tracking-tight text-white uppercase font-sans">CINEMA CHANNELS</h2>
+        <p id="splash-status-text" class="text-[10px] text-purple-400 font-mono tracking-widest mt-1 uppercase">Broadcast engine waiting</p>
+        
+        <button id="btn-start-play" class="mt-6 px-6 py-2.5 bg-purple-600 text-white text-xs font-black rounded-full hover:bg-purple-500 shadow-lg pointer-events-auto transition-transform active:scale-95 uppercase tracking-widest border border-purple-400/20">
+          Start Stream Loop
+        </button>
+      </div>
+
+      <div class="absolute bottom-6 left-6 text-left">
+        <div class="text-white/20 font-mono text-[9px] uppercase tracking-widest">NEXUS CINEMA CORE</div>
+        <div class="text-white/40 text-xs font-sans">Readying virtual scheduled broadcasts...</div>
+      </div>
+    </div>
+
+    <!-- Quick Hotkeys Guide -->
+    <div id="corner-keys" class="fixed bottom-4 left-6 z-40 text-left opacity-100 transition-opacity duration-300 select-none pointer-events-none">
+      <p class="text-[10px] font-mono text-white/40 leading-normal uppercase tracking-wider">
+        [M] Left Menu • [G] Bottom Guide • [A] Toggle Ratio
+      </p>
+    </div>
+
+    <!-- TOP HUD OVERLAY CONTROLS BAR -->
+    <div id="top-hud" class="fixed top-4 right-4 z-40 flex items-center gap-3 transition-all duration-300">
+      <div class="flex items-center gap-2 px-3.5 py-2 bg-black/60 backdrop-blur-md rounded-full border border-white/10 text-[10px] font-mono shadow-xl">
+        <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+        <span class="text-white/50">STATION:</span>
+        <strong id="hud-channel-name" class="text-white tracking-wide uppercase">OFFLINE</strong>
+      </div>
+
+      <button id="hud-ratio-btn" class="px-3.5 py-2 bg-black/60 hover:bg-black/80 backdrop-blur-md text-white border border-white/10 text-[10px] font-mono rounded-full flex items-center gap-1.5 shadow-lg active:scale-95 transition-all cursor-pointer" title="Toggle Aspect Ratio">
+        <span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+        <span id="hud-ratio-text">RATIO: CONTAIN</span>
+      </button>
+
+      <button id="hud-menu-btn" class="px-4 py-2 bg-[#121217] hover:bg-[#1a1a24] backdrop-blur-md text-white border border-white/10 text-[10px] font-black tracking-widest rounded-full flex items-center gap-2 shadow-lg active:scale-95 transition-all cursor-pointer">
+        <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+        <span>CHANNELS</span>
+      </button>
+
+      <button id="hud-guide-btn" class="px-4 py-2 bg-[#121217] hover:bg-[#1a1a24] backdrop-blur-md text-white border border-white/10 text-[10px] font-black tracking-widest rounded-full flex items-center gap-2 shadow-lg active:scale-95 transition-all cursor-pointer">
+        <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+        <span>TV GUIDE</span>
+      </button>
+    </div>
+
+  </div>
+
+  <!-- SLIDING LEFT STATION DRAWER -->
+  <aside id="left-drawer" class="fixed top-0 bottom-0 left-0 w-80 bg-[#07070a]/95 border-r border-white/10 backdrop-blur-md transform -translate-x-full transition-transform duration-500 z-[45] flex flex-col overflow-hidden text-left shadow-2xl">
+    <div id="drawer-glow" class="absolute inset-0 pointer-events-none transition-all duration-700 opacity-20 filter blur-[24px] transform-gpu z-0"></div>
+
+    <div class="p-4 border-b border-white/10 bg-black/40 z-10">
+      <div class="flex items-center gap-2 text-purple-400 mb-1">
+        <svg class="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4"></path></svg>
+        <h2 class="text-xs font-black tracking-widest text-white uppercase font-sans">STATION DIRECTORY</h2>
+      </div>
+      <p class="text-[9px] font-mono text-gray-500 uppercase tracking-widest">Select station tuner</p>
+    </div>
+
+    <div class="p-3 border-b border-white/5 bg-black/20 z-10">
+      <div class="relative">
+        <input id="drawer-search" type="text" placeholder="Search playlist..." class="w-full bg-[#111115] border border-white/10 focus:border-purple-500/50 rounded-lg px-3 py-2 text-xs font-mono text-white placeholder-gray-500 outline-none transition-all">
+      </div>
+    </div>
+
+    <div id="drawer-categories" class="flex gap-1.5 overflow-x-auto p-3 border-b border-white/5 scrollbar-none bg-black/20 shrink-0 z-10"></div>
+
+    <div id="drawer-channel-list" class="flex-1 overflow-y-auto p-2 space-y-1 z-10"></div>
+  </aside>
+
+  <!-- SLIDING BOTTOM TV GUIDE OVERLAY -->
+  <aside id="bottom-guide" class="fixed bottom-0 left-0 right-0 h-72 bg-[#07070a]/95 border-t border-white/10 backdrop-blur-md transform translate-y-full transition-transform duration-500 z-[45] flex flex-col p-4 text-white overflow-hidden shadow-2xl text-left">
+    <div id="guide-glow" class="absolute inset-0 pointer-events-none transition-all duration-700 opacity-20 filter blur-[24px] transform-gpu z-0"></div>
+
+    <div class="flex items-center justify-between border-b border-white/5 pb-2 mb-3 shrink-0 z-10">
+      <div class="flex items-center gap-3">
+        <div id="guide-badge" class="px-2 py-0.5 rounded text-[10px] font-black tracking-widest text-white font-mono border border-white/10" style="background-color: rgb(140, 92, 208);">WSTN</div>
+        <div class="text-left">
+          <h2 id="guide-channel-name" class="text-xs font-black tracking-wider uppercase text-white font-sans">No Channel</h2>
+          <p id="guide-channel-tagline" class="text-[9px] font-mono text-purple-400">EPG Live Scheduler</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span class="px-2.5 py-0.5 text-[9px] bg-purple-500/10 border border-purple-500/30 text-purple-400 rounded-full font-mono uppercase tracking-widest">
+          TV Shows
+        </span>
+      </div>
+    </div>
+
+    <div class="bg-black/40 border border-white/5 rounded-lg p-3 mb-3 flex items-center justify-between z-10 shrink-0">
+      <div class="flex items-center gap-3">
+        <div class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
+        <div>
+          <span class="text-[9px] font-mono text-gray-500 uppercase tracking-wider block">EPG Live Block:</span>
+          <h3 id="guide-current-show-title" class="text-xs font-bold text-white uppercase tracking-wider">Loading...</h3>
+          <p id="guide-current-show-episode" class="text-[10px] text-gray-400">Loading schedule...</p>
+        </div>
+      </div>
+      <div class="text-right">
+        <span id="guide-clock" class="text-xs font-mono font-bold text-purple-400 bg-purple-950/20 px-3 py-1.5 rounded border border-purple-500/10">00:00:00 AM</span>
+      </div>
+    </div>
+
+    <div class="text-[9px] font-mono text-gray-500 uppercase tracking-widest mb-1.5 z-10 shrink-0">
+      Auto-Scheduled Virtual Loop Schedule
+    </div>
+
+    <div id="guide-slots" class="flex-1 flex gap-3 pb-1 pr-1 overflow-x-auto z-10 scrollbar-none"></div>
+  </aside>
+
+  <!-- PLAYER INTERACTIVE LOGIC & DATA ENGINE -->
+  <script>
+    // 1. CHANNELS DIRECTORY DATASET
+    const CHANNELS = [
+      {
+        id: "ch-westerns",
+        number: "101",
+        name: "Classic Westerns HD",
+        tagline: "High-noon showdowns and frontier justice.",
+        category: "TV Shows",
+        logoText: "WESTERN",
+        accentColor: "#D97706",
+        shows: [
+          {
+            id: "show-westerns-1",
+            title: "Classic Westerns Broadcast Loop",
+            episodes: [
+              { id: "ep-w1", title: "Maverick - A Flock Of Trouble", season: "3", episodeNumber: "22", url: "https://archive.org/download/s-01e-02.-point-blank/Maverick%20S03e22%20-%20A%20Flock%20Of%20Trouble.mp4", durationMs: 3000000 },
+              { id: "ep-w2", title: "Maverick - The Iron Hand", season: "3", episodeNumber: "23", url: "https://archive.org/download/s-01e-02.-point-blank/Maverick%20S03e23%20-%20The%20Iron%20Hand.mp4", durationMs: 3000000 },
+              { id: "ep-w3", title: "Maverick - Greenbacks, Unlimited", season: "3", episodeNumber: "26", url: "https://archive.org/download/s-01e-02.-point-blank/Maverick%20S03e26%20-%20Greenbacks,%20Unlimited.mp4", durationMs: 3000000 },
+              { id: "ep-w4", title: "Maverick - Bundle From Britain", season: "4", episodeNumber: "1", url: "https://archive.org/download/s-01e-02.-point-blank/Maverick%20S04e01%20-%20Bundle%20From%20Britain.mp4", durationMs: 3000000 }
+            ]
+          }
+        ]
+      },
+      {
+        id: "ch-retro-crime",
+        number: "102",
+        name: "Classic Cinema & TV Crime",
+        tagline: "24/7 Noir, Mystery, Legal & Crime Classics",
+        category: "TV Shows",
+        logoText: "CRIME",
+        accentColor: "#E11D48",
+        shows: [
+          {
+            id: "show-crime-1",
+            title: "Mission: Impossible Lineup",
+            episodes: [
+              { id: "ep-c1", title: "Mission Impossible - Two Thousand", season: "7", episodeNumber: "2", url: "https://archive.org/download/01-tv-fighting-crime-part-2_20240703/MISSION%20IMPOSSIBLE.S7E02%20Two%20Thousand.mp4", durationMs: 3000000 },
+              { id: "ep-c2", title: "Mission Impossible - The Deal", season: "7", episodeNumber: "3", url: "https://archive.org/download/01-tv-fighting-crime-part-2_20240703/MISSION%20IMPOSSIBLE.S7E03%20The%20Deal.mp4", durationMs: 3000000 },
+              { id: "ep-c3", title: "Mission Impossible - Leona", season: "7", episodeNumber: "4", url: "https://archive.org/download/01-tv-fighting-crime-part-2_20240703/MISSION%20IMPOSSIBLE.S7E04%20Leona.mp4", durationMs: 3000000 }
+            ]
+          }
+        ]
+      },
+      {
+        id: "ch-sitcoms",
+        number: "103",
+        name: "Classic Sitcoms & Comedy",
+        tagline: "24/7 Retro Sitcoms, Cartoons & Comedies",
+        category: "Comedy",
+        logoText: "COMEDY",
+        accentColor: "#EC4899",
+        shows: [
+          {
+            id: "show-sitcoms-1",
+            title: "Hogan's Heroes & Sitcom Vault",
+            episodes: [
+              { id: "ep-s1", title: "Hogan's Heroes - The Informer", season: "1", episodeNumber: "1", url: "https://archive.org/download/hogans-heroes-s-01-e-01-the-informer_202509/Hogan%27s%20Heroes_S01E01_The%20Informer.mp4", durationMs: 1500000 },
+              { id: "ep-s2", title: "Hogan's Heroes - Hold That Tiger", season: "1", episodeNumber: "2", url: "https://archive.org/download/hogans-heroes-s-01-e-01-the-informer_202509/Hogan%27s%20Heroes_S01E02_Hold%20That%20Tiger.mp4", durationMs: 1500000 }
+            ]
+          }
+        ]
+      },
+      {
+        id: "ch-open-cinema",
+        number: "104",
+        name: "Cinema Showcase HD",
+        tagline: "High bitrate open movies & feature film streams",
+        category: "Movies",
+        logoText: "CINEMA",
+        accentColor: "#8B5CF6",
+        shows: [
+          {
+            id: "show-cinema-1",
+            title: "Feature Film Showcase",
+            episodes: [
+              { id: "ep-movie-1", title: "Big Buck Bunny 1080p", season: "1", episodeNumber: "1", url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", durationMs: 600000 },
+              { id: "ep-movie-2", title: "Tears of Steel Sci-Fi Short", season: "1", episodeNumber: "2", url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4", durationMs: 720000 },
+              { id: "ep-movie-3", title: "Elephant's Dream", season: "1", episodeNumber: "3", url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4", durationMs: 650000 }
+            ]
+          }
+        ]
+      }
+    ];
+
+    // 2. PLAYER STATE & DOM REFS
+    let activeChannel = CHANNELS[0];
+    let currentPlaylist = [];
+    let currentEpisodeIndex = 0;
+    let hlsInstance = null;
+    let isDrawerOpen = false;
+    let isGuideOpen = false;
+    let activeCategory = 'ALL';
+    let searchQuery = '';
+    let isObjectContain = true;
+
+    const videoEl = document.getElementById('video-element');
+    const splashEl = document.getElementById('player-splash');
+    const splashChannelName = document.getElementById('splash-channel-name');
+    const splashStatusText = document.getElementById('splash-status-text');
+    const btnStartPlay = document.getElementById('btn-start-play');
+    const unmuteBanner = document.getElementById('unmute-banner');
+    const bufferSpinner = document.getElementById('buffer-spinner');
+    
+    const hudChannelName = document.getElementById('hud-channel-name');
+    const hudRatioBtn = document.getElementById('hud-ratio-btn');
+    const hudRatioText = document.getElementById('hud-ratio-text');
+    const hudMenuBtn = document.getElementById('hud-menu-btn');
+    const hudGuideBtn = document.getElementById('hud-guide-btn');
+
+    const leftDrawer = document.getElementById('left-drawer');
+    const drawerSearch = document.getElementById('drawer-search');
+    const drawerCategories = document.getElementById('drawer-categories');
+    const drawerChannelList = document.getElementById('drawer-channel-list');
+
+    const bottomGuide = document.getElementById('bottom-guide');
+    const guideBadge = document.getElementById('guide-badge');
+    const guideChannelName = document.getElementById('guide-channel-name');
+    const guideChannelTagline = document.getElementById('guide-channel-tagline');
+    const guideCurrentShowTitle = document.getElementById('guide-current-show-title');
+    const guideCurrentShowEpisode = document.getElementById('guide-current-show-episode');
+    const guideClock = document.getElementById('guide-clock');
+    const guideSlots = document.getElementById('guide-slots');
+
+    // 3. EPG VIRTUAL BROADCAST CALCULATIONS
+    function flattenChannelPlaylist(channel) {
+      const list = [];
+      channel.shows.forEach(show => {
+        show.episodes.forEach(ep => {
+          list.push({ ...ep, showTitle: show.title });
+        });
+      });
+      return list;
+    }
+
+    function calculateLiveBroadcastPosition(playlist) {
+      if (!playlist.length) return { index: 0, seekSec: 0 };
+      const totalDurationMs = playlist.reduce((acc, ep) => acc + (ep.durationMs || 1800000), 0);
+      const nowMs = Date.now();
+      const loopOffsetMs = nowMs % totalDurationMs;
+
+      let accumulatedMs = 0;
+      for (let i = 0; i < playlist.length; i++) {
+        const epDuration = playlist[i].durationMs || 1800000;
+        if (accumulatedMs + epDuration > loopOffsetMs) {
+          const seekSec = (loopOffsetMs - accumulatedMs) / 1000;
+          return { index: i, seekSec: Math.max(0, seekSec) };
+        }
+        accumulatedMs += epDuration;
+      }
+      return { index: 0, seekSec: 0 };
+    }
+
+    // 4. STREAM LOADING & PLAYBACK ENGINE
+    function tuneToChannel(channel, forceAutoPlay = true) {
+      activeChannel = channel;
+      currentPlaylist = flattenChannelPlaylist(channel);
+      
+      const { index, seekSec } = calculateLiveBroadcastPosition(currentPlaylist);
+      currentEpisodeIndex = index;
+
+      updateHUD();
+      renderGuide();
+
+      const ep = currentPlaylist[currentEpisodeIndex];
+      if (ep) {
+        loadMediaStream(ep.url, seekSec, forceAutoPlay);
+      }
+    }
+
+    function loadMediaStream(mediaUrl, seekSec = 0, forceAutoPlay = true) {
+      bufferSpinner.style.opacity = '1';
+
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
+
+      const isHLS = mediaUrl.includes('.m3u8');
+
+      if (isHLS && Hls.isSupported()) {
+        hlsInstance = new Hls({ enableWorker: true, lowLatencyMode: true });
+        hlsInstance.loadSource(mediaUrl);
+        hlsInstance.attachMedia(videoEl);
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+          if (seekSec > 0) videoEl.currentTime = seekSec;
+          if (forceAutoPlay) triggerPlay();
+        });
+        hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            console.warn('HLS Fatal Error, falling back to next episode', data);
+            playNextEpisode();
+          }
+        });
+      } else {
+        videoEl.src = mediaUrl;
+        videoEl.load();
+        
+        const onMetadata = () => {
+          if (seekSec > 0 && !isNaN(videoEl.duration) && seekSec < videoEl.duration) {
+            videoEl.currentTime = seekSec;
+          }
+          if (forceAutoPlay) triggerPlay();
+          videoEl.removeEventListener('loadedmetadata', onMetadata);
+        };
+        videoEl.addEventListener('loadedmetadata', onMetadata);
+      }
+    }
+
+    function triggerPlay() {
+      const playPromise = videoEl.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            unmuteBanner.style.opacity = '0';
+            unmuteBanner.style.pointerEvents = 'none';
+          })
+          .catch(() => {
+            // Autoplay blocked: mute video and display Unmute Banner
+            videoEl.muted = true;
+            videoEl.play();
+            unmuteBanner.style.opacity = '1';
+            unmuteBanner.style.pointerEvents = 'auto';
+          });
+      }
+    }
+
+    function playNextEpisode() {
+      if (!currentPlaylist.length) return;
+      currentEpisodeIndex = (currentEpisodeIndex + 1) % currentPlaylist.length;
+      const ep = currentPlaylist[currentEpisodeIndex];
+      loadMediaStream(ep.url, 0, true);
+      renderGuide();
+    }
+
+    // 5. UI CONTROLS & RENDER FUNCTIONS
+    function updateHUD() {
+      hudChannelName.textContent = `${activeChannel.number} • ${activeChannel.name}`;
+      splashChannelName.textContent = activeChannel.name;
+      splashStatusText.textContent = `CH ${activeChannel.number} • ${activeChannel.category}`;
+    }
+
+    function renderDrawer() {
+      // Extract unique categories
+      const categories = ['ALL', ...new Set(CHANNELS.map(c => c.category.toUpperCase()))];
+      
+      drawerCategories.innerHTML = categories.map(cat => `
+        <button onclick="setCategory('${cat}')" class="px-2.5 py-1 text-[9px] font-mono rounded-full uppercase tracking-wider transition-all border ${
+          activeCategory === cat 
+            ? 'bg-purple-600 border-purple-400 text-white font-bold' 
+            : 'bg-black/40 border-white/10 text-gray-400 hover:border-white/30'
+        }">${cat}</button>
+      `).join('');
+
+      const filtered = CHANNELS.filter(ch => {
+        const matchesCat = activeCategory === 'ALL' || ch.category.toUpperCase() === activeCategory;
+        const matchesSearch = ch.name.toLowerCase().includes(searchQuery) || ch.number.includes(searchQuery);
+        return matchesCat && matchesSearch;
+      });
+
+      drawerChannelList.innerHTML = filtered.map(ch => `
+        <div onclick="selectChannelFromDrawer('${ch.id}')" class="p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+          activeChannel.id === ch.id 
+            ? 'bg-purple-950/40 border-purple-500/50 shadow-lg' 
+            : 'bg-black/30 border-white/5 hover:border-white/20'
+        }">
+          <div class="flex items-center gap-2.5">
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold text-white" style="background-color: ${ch.accentColor || '#9333ea'}">${ch.number}</span>
+            <div>
+              <h4 class="text-xs font-bold text-white uppercase">${ch.name}</h4>
+              <p class="text-[9px] font-mono text-gray-400 truncate max-w-[170px]">${ch.tagline}</p>
+            </div>
+          </div>
+          <span class="w-2 h-2 rounded-full ${activeChannel.id === ch.id ? 'bg-green-500 animate-pulse' : 'bg-gray-700'}"></span>
+        </div>
+      `).join('');
+    }
+
+    function renderGuide() {
+      guideBadge.style.backgroundColor = activeChannel.accentColor || '#8C5CD0';
+      guideBadge.textContent = activeChannel.logoText || 'WSTN';
+      guideChannelName.textContent = `${activeChannel.number} - ${activeChannel.name}`;
+      guideChannelTagline.textContent = activeChannel.tagline;
+
+      const ep = currentPlaylist[currentEpisodeIndex];
+      if (ep) {
+        guideCurrentShowTitle.textContent = ep.title;
+        guideCurrentShowEpisode.textContent = `Season ${ep.season || 1} • Episode ${ep.episodeNumber || 1}`;
+      }
+
+      guideSlots.innerHTML = currentPlaylist.map((item, idx) => `
+        <div class="shrink-0 w-64 p-3 rounded-lg border flex flex-col justify-between transition-all ${
+          idx === currentEpisodeIndex 
+            ? 'bg-purple-900/30 border-purple-500/60 shadow-lg' 
+            : 'bg-black/30 border-white/5 opacity-60'
+        }">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[9px] font-mono ${idx === currentEpisodeIndex ? 'text-purple-400 font-bold' : 'text-gray-500'}">
+                ${idx === currentEpisodeIndex ? '● ON AIR NOW' : `SLOT ${idx + 1}`}
+              </span>
+              <span class="text-[9px] font-mono text-gray-400">${Math.round((item.durationMs || 1800000) / 60000)}m</span>
+            </div>
+            <h4 class="text-xs font-bold text-white uppercase line-clamp-1">${item.title}</h4>
+            <p class="text-[9px] text-gray-400 font-mono mt-0.5">S${item.season || 1} E${item.episodeNumber || 1}</p>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function setCategory(cat) {
+      activeCategory = cat;
+      renderDrawer();
+    }
+
+    function selectChannelFromDrawer(chId) {
+      const ch = CHANNELS.find(c => c.id === chId);
+      if (ch) {
+        tuneToChannel(ch, true);
+        renderDrawer();
+      }
+    }
+
+    function toggleDrawer() {
+      isDrawerOpen = !isDrawerOpen;
+      leftDrawer.style.transform = isDrawerOpen ? 'translateX(0)' : 'translateX(-100%)';
+      if (isDrawerOpen) renderDrawer();
+    }
+
+    function toggleGuide() {
+      isGuideOpen = !isGuideOpen;
+      bottomGuide.style.transform = isGuideOpen ? 'translateY(0)' : 'translateY(100%)';
+      if (isGuideOpen) renderGuide();
+    }
+
+    function toggleAspectRatio() {
+      isObjectContain = !isObjectContain;
+      if (isObjectContain) {
+        videoEl.classList.remove('object-cover');
+        videoEl.classList.add('object-contain');
+        hudRatioText.textContent = 'RATIO: CONTAIN';
+      } else {
+        videoEl.classList.remove('object-contain');
+        videoEl.classList.add('object-cover');
+        hudRatioText.textContent = 'RATIO: COVER';
+      }
+    }
+
+    // 6. EVENT LISTENERS
+    btnStartPlay.addEventListener('click', () => {
+      splashEl.style.opacity = '0';
+      splashEl.style.pointerEvents = 'none';
+      tuneToChannel(activeChannel, true);
+    });
+
+    unmuteBanner.addEventListener('click', () => {
+      videoEl.muted = false;
+      unmuteBanner.style.opacity = '0';
+      unmuteBanner.style.pointerEvents = 'none';
+    });
+
+    hudMenuBtn.addEventListener('click', toggleDrawer);
+    hudGuideBtn.addEventListener('click', toggleGuide);
+    hudRatioBtn.addEventListener('click', toggleAspectRatio);
+
+    drawerSearch.addEventListener('input', (e) => {
+      searchQuery = e.target.value.toLowerCase();
+      renderDrawer();
+    });
+
+    videoEl.addEventListener('ended', playNextEpisode);
+
+    videoEl.addEventListener('waiting', () => {
+      bufferSpinner.style.opacity = '1';
+    });
+
+    videoEl.addEventListener('playing', () => {
+      bufferSpinner.style.opacity = '0';
+    });
+
+    videoEl.addEventListener('canplay', () => {
+      bufferSpinner.style.opacity = '0';
+    });
+
+    videoEl.addEventListener('error', () => {
+      console.warn('Video element playback error encountered. Attempting to skip...');
+      bufferSpinner.style.opacity = '0';
+      setTimeout(playNextEpisode, 2000);
+    });
+
+    // Keyboard Shortcuts Listener
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      
+      const key = e.key.toLowerCase();
+      if (key === 'm') toggleDrawer();
+      if (key === 'g') toggleGuide();
+      if (key === 'a') toggleAspectRatio();
+      if (key === ' ') {
+        e.preventDefault();
+        if (videoEl.paused) videoEl.play(); else videoEl.pause();
+      }
+    });
+
+    // Live EPG Clock Timer
+    setInterval(() => {
+      const now = new Date();
+      guideClock.textContent = now.toLocaleTimeString();
+    }, 1000);
+
+    // Initial Setup
+    updateHUD();
+    renderDrawer();
+  </script>
+</body>
 </html>
-
-
