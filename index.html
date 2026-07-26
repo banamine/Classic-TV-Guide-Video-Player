@@ -1,18 +1,24 @@
-@'
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Relative path for GitHub Pages compatibility -->
+    <link rel="icon" type="image/svg+xml" href="./vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Classic TV Guide & Video Player</title>
+    <title>Classic TV Guide Video Player</title>
+    <style>
+      /* Ensure html, body, and #root have full viewport height */
+      html, body, #root {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        width: 100%;
+      }
+    </style>
   </head>
-  <body class="bg-black text-white m-0 p-0 overflow-hidden">
+  <body>
     <div id="root"></div>
+    <!-- Fixed script src path to use relative URL -->
     <script type="module" src="./src/main.tsx"></script>
   </body>
 </html>
-'@ | Set-Content -Path "index.html" -Encoding UTF8
-
-git add index.html
-git commit -m "fix: update script src to relative path"
-git push origin main
