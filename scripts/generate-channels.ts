@@ -52,127 +52,29 @@ function loadCommercials(): Episode[] {
  * Rotates shows/episodes and builds a 24-hour schedule applying commercial injection rules.
  */
 function applyCommercialsAnd24hCap(channel: Channel, isNews: boolean, commercials: Episode[]): Channel {
-  const allEpisodes: Episode[] = [];
-  channel.shows.forEach(show => {
-    (show.episodes || []).forEach(ep => {
-      if (!ep.isFiller) {
-        allEpisodes.push(ep);
-      }
+  if (!channel.shows || channel.shows.length === 0) return channel;
+
+  // Preserve distinct show structure while ensuring episodes have clean duration and runtime fields
+  const updatedShows: Show[] = channel.shows.map((show) => {
+    const cleanedEpisodes = (show.episodes || []).map((ep) => {
+      const epSec = Math.round((ep.durationMs || (ep.runtimeMins ? ep.runtimeMins * 60 : 1800)) / 1000);
+      return {
+        ...ep,
+        durationMs: epSec * 1000,
+        runtimeMins: Math.ceil(epSec / 60),
+        isFiller: false
+      };
     });
+
+    return {
+      ...show,
+      episodes: cleanedEpisodes
+    };
   });
-
-  if (allEpisodes.length === 0) return channel;
-
-  // 1. Deterministic Daily Round-Robin Shift
-  const rotationOffset = getDailyRotationOffset(channel.id) % allEpisodes.length;
-  const rotatedEpisodes = [
-    ...allEpisodes.slice(rotationOffset),
-    ...allEpisodes.slice(0, rotationOffset)
-  ];
-
-  const processedEpisodes: Episode[] = [];
-  let accumDurationSec = 0;
-  let epIdx = 0;
-  let commIdx = 0;
-
-  // 2. Build 24-Hour Window with Commercial Rules
-  while (accumDurationSec < SECONDS_IN_24H && rotatedEpisodes.length > 0) {
-    const ep = rotatedEpisodes[epIdx % rotatedEpisodes.length];
-    const epSec = Math.round((ep.durationMs || (ep.runtimeMins ? ep.runtimeMins * 60 : 1800)) / 1000);
-
-    if (accumDurationSec + epSec > SECONDS_IN_24H) {
-      break;
-    }
-
-    const cleanEp: Episode = {
-      ...ep,
-      durationMs: epSec * 1000,
-      runtimeMins: Math.ceil(epSec / 60),
-      isFiller: false
-    };
-    processedEpisodes.push(cleanEp);
-    accumDurationSec += epSec;
-
-    // Commercial Rules
-    if (isNews) {
-      // NEWS RULE: No commercials UNLESS clip exceeds 20 minutes (1200s)
-      if (epSec > TWENTY_MIN_SEC && commercials.length > 0) {
-        const comm = commercials[commIdx % commercials.length];
-        const commSec = Math.round((comm.durationMs || 30000) / 1000);
-        if (accumDurationSec + commSec <= SECONDS_IN_24H) {
-          processedEpisodes.push({
-            ...comm,
-            id: `comm-news-${channel.id}-${commIdx}-${epIdx}`,
-            durationMs: commSec * 1000,
-            runtimeMins: Math.ceil(commSec / 60),
-            isFiller: true
-          });
-          accumDurationSec += commSec;
-          commIdx++;
-        }
-      }
-    } else {
-      // REGULAR SHOW RULE: Exactly 1 commercial break between actual shows
-      if (commercials.length > 0) {
-        const comm = commercials[commIdx % commercials.length];
-        const commSec = Math.round((comm.durationMs || 30000) / 1000);
-        if (accumDurationSec + commSec <= SECONDS_IN_24H) {
-          processedEpisodes.push({
-            ...comm,
-            id: `comm-break-${channel.id}-${commIdx}-${epIdx}`,
-            durationMs: commSec * 1000,
-            runtimeMins: Math.ceil(commSec / 60),
-            isFiller: true
-          });
-          accumDurationSec += commSec;
-          commIdx++;
-        }
-      }
-    }
-
-    epIdx++;
-  }
-
-  // 3. Backfill Dead Air up to EXACTLY 24 Hours (86,400 seconds) with Commercial Slates
-  const deadAirSec = SECONDS_IN_24H - accumDurationSec;
-  if (deadAirSec > 0) {
-    const fillComm = (commercials.length > 0) ? commercials[commIdx % commercials.length] : {
-      id: 'comm-vintage-slate-default',
-      title: 'Station ID & Interstitial Slate',
-      season: '1',
-      episodeNumber: '1',
-      url: 'https://archive.org/download/classic_tv_commercials/station_id_slate.mp4',
-      durationMs: 30000,
-      runtimeMins: 1,
-      isFiller: true,
-      funFact: 'Retro Broadcast Interstitial Slate'
-    };
-
-    processedEpisodes.push({
-      ...fillComm,
-      id: `comm-fill-slate-${channel.id}`,
-      title: fillComm.title || 'Station ID & Commercial Slate',
-      durationMs: deadAirSec * 1000,
-      runtimeMins: Math.ceil(deadAirSec / 60),
-      isFiller: true,
-      funFact: `Auto-calculated dead-air backfill commercial slate (${deadAirSec}s).`
-    });
-    accumDurationSec += deadAirSec;
-  }
-
-  // Re-wrap into single 24-hour daily broadcast show
-  const scheduledShow: Show = {
-    id: `show-${channel.id}-24h-daily`,
-    title: `${channel.name} Daily Broadcast`,
-    description: `24-hour daily lineup for ${channel.name}`,
-    year: '2026',
-    genre: channel.category,
-    episodes: processedEpisodes
-  };
 
   return {
     ...channel,
-    shows: [scheduledShow]
+    shows: updatedShows
   };
 }
 
@@ -303,11 +205,45 @@ async function buildChannelFromM3uUrl(
   }
 ): Promise<Channel> {
   console.log(`📥 Fetching M3U from ${m3uUrl}...`);
-  const res = await fetch(m3uUrl);
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status} when fetching ${m3uUrl}`);
+  let text = '';
+
+  // 1. Try local cache in public/m3u/ if present
+  const localFileName = m3uUrl.includes('BIG') ? 'BIG_WESTERN_ZONE.m3u' :
+                        m3uUrl.includes('CRIME') ? 'TV_CRIME_cleaned.m3u' :
+                        m3uUrl.includes('hogan') ? 'hogans.m3u' : '';
+
+  const localCachePath = localFileName ? path.join(process.cwd(), 'public', 'm3u', localFileName) : '';
+
+  if (localCachePath && fs.existsSync(localCachePath)) {
+    try {
+      text = fs.readFileSync(localCachePath, 'utf8');
+      console.log(`⚡ Loaded cached M3U from local path ${localCachePath} (${text.length} bytes)`);
+    } catch (e) {
+      console.warn(`⚠️ Error reading local cache ${localCachePath}, falling back to fetch`);
+    }
   }
-  const text = await res.text();
+
+  // 2. If no local cache, fetch from remote with retries
+  if (!text) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await fetch(m3uUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        });
+        if (res.ok) {
+          text = await res.text();
+          break;
+        }
+      } catch (err: any) {
+        console.warn(`Attempt ${attempt} fetch failed: ${err.message}`);
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+
+  if (!text) {
+    throw new Error(`Failed to retrieve M3U payload from ${m3uUrl}`);
+  }
 
   const lines = text.split(/\r?\n/);
   const rawItems: { title: string; url: string; extDurationSec?: number }[] = [];

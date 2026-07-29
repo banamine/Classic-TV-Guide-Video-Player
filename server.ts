@@ -38,30 +38,23 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Immediately build and save fresh_news.json / news.json & schedule manifests on startup
-  buildAndSaveFreshNews()
-    .then(() => {
-      console.log('[Boot Service] Static news assets pre-generated successfully.');
-      const channels = LocalDatabase.getChannels();
-      if (channels && channels.length > 0) {
-        writeDailyScheduleFiles(channels);
-        console.log('[Boot Service] Daily static schedule manifests generated successfully.');
-      }
-      backgroundDurationProber().catch((e) => console.error('[Boot Service] Duration prober failed:', e.message));
-    })
-    .catch((err: any) => {
-      console.error('[Boot Service Failed] Pre-generation of static news assets failed: ', err.message);
-      backgroundDurationProber().catch((e) => console.error('[Boot Service] Duration prober failed:', e.message));
-    });
+  // Cache-Control headers middleware for API routes to prevent stale polling
+  app.use('/api', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    next();
+  });
 
   app.use(express.json({ limit: '50mb' }));
 
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok' });
+    res.json({ status: 'ok', timestamp: Date.now() });
   });
 
-  // Static schedules directory endpoint
-  app.use('/schedules', express.static(path.join(process.cwd(), 'public', 'schedules')));
+  // Static schedules directory endpoint with HTTP cache headers
+  app.use('/schedules', express.static(path.join(process.cwd(), 'public', 'schedules'), {
+    maxAge: '1h',
+    etag: true
+  }));
 
   // Proxy stream endpoint for external news feeds or archive.org streams requiring byte-range CORS support
   app.get('/proxy-stream', async (req, res) => {
@@ -177,14 +170,19 @@ async function startServer() {
       } catch (e) {}
 
       const sanitizedMessage = err.message.replace(new RegExp(token, 'g'), '***TOKEN***');
+      if (err.status === 422 || err.response?.status === 422 || err.message.includes('422') || err.message.includes('Unprocessable Entity')) {
+        return res.status(422).json({
+          error: 'Missing workflow_dispatch trigger in .github/workflows/deploy.yml. Add "on: workflow_dispatch:" to your workflow YAML.'
+        });
+      }
       res.status(500).json({ error: sanitizedMessage });
     }
   });
 
   // Get active channels (and seed if empty)
-  app.get('/api/channels', (req, res) => {
+  app.get('/api/channels', async (req, res) => {
     try {
-      const channels = LocalDatabase.getChannels();
+      const channels = await LocalDatabase.getChannels();
       res.json(channels);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -192,13 +190,13 @@ async function startServer() {
   });
 
   // Dynamic Client-Side Duration Probing Sync
-  app.post('/api/channels/update-duration', (req, res) => {
+  app.post('/api/channels/update-duration', async (req, res) => {
     const { channelId, episodeId, durationMs } = req.body;
     if (!channelId || !episodeId || !durationMs) {
       return res.status(400).json({ error: 'Missing channelId, episodeId, or durationMs.' });
     }
     try {
-      const channels = LocalDatabase.getChannels();
+      const channels = await LocalDatabase.getChannels();
       let updated = false;
 
       // 1. First search in specified channelId
@@ -233,7 +231,7 @@ async function startServer() {
       }
 
       if (updated) {
-        LocalDatabase.saveChannels(channels);
+        await LocalDatabase.saveChannels(channels);
         console.log(`[Duration Sync] Updated Channel: ${channelId} | Episode: ${episodeId} | Duration: ${durationMs}ms`);
         return res.json({ success: true, message: `Successfully synchronized and saved probed duration (${Math.round(durationMs / 1000)}s) for episode ${episodeId}.` });
       }
@@ -250,13 +248,13 @@ async function startServer() {
   });
 
   // Save active channels (EPG state)
-  app.post('/api/channels', (req, res) => {
+  app.post('/api/channels', async (req, res) => {
     try {
       const channels = req.body;
       if (!Array.isArray(channels)) {
         return res.status(400).json({ error: 'Payload must be an array of channels.' });
       }
-      LocalDatabase.saveChannels(channels);
+      await LocalDatabase.saveChannels(channels);
       res.json({ message: 'EPG state updated successfully in local database.', count: channels.length });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -271,7 +269,7 @@ async function startServer() {
         return res.status(400).json({ error: 'channelId parameter is required.' });
       }
 
-      const channels = LocalDatabase.getChannels();
+      const channels = await LocalDatabase.getChannels();
       const channel = channels.find(c => c.id === channelId);
       if (!channel) {
         return res.status(404).json({ error: `Channel with ID "${channelId}" not found in database.` });
@@ -281,7 +279,7 @@ async function startServer() {
         return res.status(400).json({ error: `Selected channel "${channel.name}" has no registered programs/shows to receive IPTV content.` });
       }
 
-      LocalDatabase.addScraperLog(`IPTV News Sync: Fetching last 24 hours of broadcasts from public IPTV feed API for ${channel.name}...`);
+      await LocalDatabase.addScraperLog(`IPTV News Sync: Fetching last 24 hours of broadcasts from public IPTV feed API for ${channel.name}...`);
 
       // Simulated public IPTV news feed API data. Representing actual high-quality playable news segments.
       const now = new Date();
@@ -339,8 +337,8 @@ async function startServer() {
       originalShow.description = `IPTV Automated News Stream: Curated broadcast segments harvested dynamically within the last 24 hours. Sync completed at ${now.toLocaleString()}.`;
       originalShow.year = String(now.getFullYear());
 
-      LocalDatabase.saveChannels(channels);
-      LocalDatabase.addScraperLog(`IPTV News Sync: Successfully replaced ${oldEpisodesCount} static episodes in ${channel.name} with 5 newly synchronized live-broadcast segments.`);
+      await LocalDatabase.saveChannels(channels);
+      await LocalDatabase.addScraperLog(`IPTV News Sync: Successfully replaced ${oldEpisodesCount} static episodes in ${channel.name} with 5 newly synchronized live-broadcast segments.`);
 
       res.json({
         success: true,
@@ -357,11 +355,11 @@ async function startServer() {
   // Automated/manual daily source update for News channels
   app.post('/api/daily-source-update', async (req, res) => {
     try {
-      LocalDatabase.addScraperLog(`[Daily Source Update API] Automated 24h news scraping & schedule update triggered...`);
+      await LocalDatabase.addScraperLog(`[Daily Source Update API] Automated 24h news scraping & schedule update triggered...`);
 
       // 1. Ingest real live news streams from Archive.org
       const newsPayload = await buildAndSaveFreshNews();
-      LocalDatabase.addScraperLog(`[Daily Source Update API] Scraped ${newsPayload.total} live news episodes across Fox, CNN, BBC, DW, RT, KPIX, and AJN.`);
+      await LocalDatabase.addScraperLog(`[Daily Source Update API] Scraped ${newsPayload.total} live news episodes across Fox, CNN, BBC, DW, RT, KPIX, and AJN.`);
 
       // 2. Synchronize all news channels with 24h capping & commercial injection
       await generateAndRegisterChannels();
@@ -369,22 +367,22 @@ async function startServer() {
       // 3. Purge episodes older than 72 hours for channels marked as 'News'
       runDailySourceUpdate();
 
-      const channels = LocalDatabase.getChannels();
+      const channels = await LocalDatabase.getChannels();
       res.json({
         success: true,
         message: `Successfully executed 24h live news ingest (${newsPayload.total} items) and updated schedules for all ${channels.length} channels.`
       });
     } catch (err: any) {
-      LocalDatabase.addScraperLog(`[Daily Source Update API Error] ${err.message}`);
+      await LocalDatabase.addScraperLog(`[Daily Source Update API Error] ${err.message}`);
       res.status(500).json({ error: err.message });
     }
   });
 
   // Execute historical backfill of news chyrons via Archive.org Third Eye API
-  app.post('/api/thirdeye/backfill', rateLimiter(10, 60000), async (req, res) => {
+  app.post('/api/thirdeye/backfill', rateLimiter(50, 60000), async (req, res) => {
     try {
       const { hours, days, startDate, endDate, mode } = req.body;
-      LocalDatabase.addScraperLog(`[API Backfill Request] Ingestion request received: ${JSON.stringify(req.body)}`);
+      await LocalDatabase.addScraperLog(`[API Backfill Request] Ingestion request received: ${JSON.stringify(req.body)}`);
       
       const result = await runThirdEyeBackfill({
         hours: hours ? parseInt(hours, 10) : undefined,
@@ -412,10 +410,10 @@ async function startServer() {
   });
 
   // Get scraper status, logs & schedule
-  app.get('/api/scraper-status', (req, res) => {
+  app.get('/api/scraper-status', async (req, res) => {
     try {
-      const status = LocalDatabase.getScraperStatus();
-      const settings = LocalDatabase.getScraperSettings();
+      const status = await LocalDatabase.getScraperStatus();
+      const settings = await LocalDatabase.getScraperSettings();
       res.json({
         ...status,
         cronSchedule: settings.cronSchedule,
@@ -428,16 +426,16 @@ async function startServer() {
   });
 
   // Save scraper settings / stealth options
-  app.post('/api/scraper-settings', (req, res) => {
+  app.post('/api/scraper-settings', async (req, res) => {
     try {
-      const settings = LocalDatabase.getScraperSettings();
+      const settings = await LocalDatabase.getScraperSettings();
       const newSettings = {
         ...settings,
         ...req.body
       };
-      LocalDatabase.saveScraperSettings(newSettings);
-      LocalDatabase.addScraperLog(`Updated stealth and scheduler configuration.`);
-      LocalDatabase.addComplianceLog('UPDATE_SETTINGS', `Stealth & Scheduler settings updated: ${JSON.stringify(req.body)}`);
+      await LocalDatabase.saveScraperSettings(newSettings);
+      await LocalDatabase.addScraperLog(`Updated stealth and scheduler configuration.`);
+      await LocalDatabase.addComplianceLog('UPDATE_SETTINGS', `Stealth & Scheduler settings updated: ${JSON.stringify(req.body)}`);
       res.json({ message: 'Settings saved successfully.', settings: newSettings });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -445,9 +443,9 @@ async function startServer() {
   });
 
   // Get administrative security/compliance audit log
-  app.get('/api/compliance-logs', (req, res) => {
+  app.get('/api/compliance-logs', async (req, res) => {
     try {
-      const logs = LocalDatabase.getComplianceLogs();
+      const logs = await LocalDatabase.getComplianceLogs();
       res.json({ logs });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -455,9 +453,9 @@ async function startServer() {
   });
 
   // Get database / query statistics
-  app.get('/api/database-stats', (req, res) => {
+  app.get('/api/database-stats', async (req, res) => {
     try {
-      const stats = LocalDatabase.getStats();
+      const stats = await LocalDatabase.getStats();
       res.json(stats);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -465,10 +463,10 @@ async function startServer() {
   });
 
   // Export full database backup snapshot for portability
-  app.get('/api/backup/export', (req, res) => {
+  app.get('/api/backup/export', async (req, res) => {
     try {
-      const backupData = LocalDatabase.exportDatabase();
-      LocalDatabase.addComplianceLog('EXPORT_DATABASE', `Snapshot backup exported containing ${backupData.channels?.length || 0} channels.`);
+      const backupData = await LocalDatabase.exportDatabase();
+      await LocalDatabase.addComplianceLog('EXPORT_DATABASE', `Snapshot backup exported containing ${backupData.channels?.length || 0} channels.`);
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Content-Disposition', 'attachment; filename=backup-database.json');
       res.json(backupData);
@@ -478,15 +476,15 @@ async function startServer() {
   });
 
   // Import full database backup snapshot
-  app.post('/api/backup/import', (req, res) => {
+  app.post('/api/backup/import', async (req, res) => {
     try {
       const backupData = req.body;
-      const result = LocalDatabase.importDatabase(backupData);
+      const result = await LocalDatabase.importDatabase(backupData);
       if (result.success) {
-        LocalDatabase.addComplianceLog('IMPORT_DATABASE', `Snapshot backup imported successfully with ${backupData.channels?.length || 0} channels.`);
+        await LocalDatabase.addComplianceLog('IMPORT_DATABASE', `Snapshot backup imported successfully with ${backupData.channels?.length || 0} channels.`);
         res.json(result);
       } else {
-        LocalDatabase.addComplianceLog('IMPORT_DATABASE_FAILURE', `Snapshot backup import failed: ${result.message}`);
+        await LocalDatabase.addComplianceLog('IMPORT_DATABASE_FAILURE', `Snapshot backup import failed: ${result.message}`);
         res.status(400).json(result);
       }
     } catch (err: any) {
@@ -495,9 +493,9 @@ async function startServer() {
   });
 
   // Clear background scraper logs
-  app.post('/api/scraper-logs/clear', (req, res) => {
+  app.post('/api/scraper-logs/clear', async (req, res) => {
     try {
-      LocalDatabase.clearScraperLogs();
+      await LocalDatabase.clearScraperLogs();
       res.json({ message: 'Logs cleared.' });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -505,7 +503,7 @@ async function startServer() {
   });
 
   // Receive telemetry logs from player clients
-  app.post('/api/telemetry/log', express.text({ type: '*/*' }), (req, res) => {
+  app.post('/api/telemetry/log', express.text({ type: '*/*' }), async (req, res) => {
     try {
       let record = req.body;
       if (typeof record === 'string') {
@@ -516,7 +514,7 @@ async function startServer() {
         }
       }
       if (record) {
-        LocalDatabase.addTelemetryLog(record);
+        await LocalDatabase.addTelemetryLog(record);
       }
       res.json({ success: true });
     } catch (err: any) {
@@ -525,9 +523,9 @@ async function startServer() {
   });
 
   // Get telemetry logs list
-  app.get('/api/telemetry/report', (req, res) => {
+  app.get('/api/telemetry/report', async (req, res) => {
     try {
-      const logs = LocalDatabase.getTelemetryLogs();
+      const logs = await LocalDatabase.getTelemetryLogs();
       res.json({ logs });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -535,9 +533,9 @@ async function startServer() {
   });
 
   // Clear telemetry logs
-  app.post('/api/telemetry/clear', (req, res) => {
+  app.post('/api/telemetry/clear', async (req, res) => {
     try {
-      LocalDatabase.clearTelemetryLogs();
+      await LocalDatabase.clearTelemetryLogs();
       res.json({ message: 'Telemetry logs cleared successfully.' });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -547,9 +545,9 @@ async function startServer() {
   // --- BACKGROUND POLING AND SCHEDULE SERVICE ---
   let lastScrapeRunTimeMs = Date.now(); // Initialize to now on startup
 
-  setInterval(() => {
+  setInterval(async () => {
     const now = new Date();
-    const settings = LocalDatabase.getScraperSettings();
+    const settings = await LocalDatabase.getScraperSettings();
     const currentMs = Date.now();
 
     // 1. Configurable Interval Background Polling Check
@@ -580,13 +578,6 @@ async function startServer() {
     }
   }, 60000); // 1 minute interval checks
 
-  // Trigger scraper once on server boot if it has never run, to instantly pre-load AI metadata for the user
-  const initialStatus = LocalDatabase.getScraperStatus();
-  if (!initialStatus?.lastRunTimestamp) {
-    console.log('[Boot Service] Executing initial TV Guide Scraper & AI enrichment...');
-    runScraper().catch(console.error);
-  }
-
   // --- VITE DEV MIDDLEWARE / STATIC PRODUCTION SERVING ---
 
   if (process.env.NODE_ENV !== 'production') {
@@ -597,7 +588,7 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, { maxAge: '1d', etag: true }));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
@@ -605,6 +596,30 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[Server] Full-Stack Server listening on http://localhost:${PORT}`);
+
+    // Defer non-blocking boot tasks asynchronously so server boot completes instantly (<50ms)
+    setTimeout(async () => {
+      buildAndSaveFreshNews()
+        .then(async () => {
+          console.log('[Boot Service] Static news assets pre-generated successfully.');
+          const channels = await LocalDatabase.getChannels();
+          if (channels && channels.length > 0) {
+            writeDailyScheduleFiles(channels);
+            console.log('[Boot Service] Daily static schedule manifests generated successfully.');
+          }
+          backgroundDurationProber().catch((e) => console.error('[Boot Service] Duration prober failed:', e.message));
+        })
+        .catch((err: any) => {
+          console.error('[Boot Service Failed] Pre-generation of static news assets failed: ', err.message);
+          backgroundDurationProber().catch((e) => console.error('[Boot Service] Duration prober failed:', e.message));
+        });
+
+      const initialStatus = await LocalDatabase.getScraperStatus();
+      if (!initialStatus?.lastRunTimestamp) {
+        console.log('[Boot Service] Executing initial TV Guide Scraper & AI enrichment in background...');
+        runScraper().catch(console.error);
+      }
+    }, 2000);
   });
 }
 

@@ -299,11 +299,13 @@ export function ScraperDashboard({ onLogEvent, onRefreshChannels, onSelectChanne
     fetchTelemetryLogs();
 
     const interval = setInterval(() => {
+      // Pause polling if document is hidden to conserve bandwidth and reduce network requests
+      if (typeof document !== 'undefined' && document.hidden) return;
       fetchStatus();
       fetchStats();
       fetchComplianceLogs();
       fetchTelemetryLogs();
-    }, 3000); // poll every 3s
+    }, 15000); // poll every 15s instead of 3s to reduce network requests
 
     return () => clearInterval(interval);
   }, []);

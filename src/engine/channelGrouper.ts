@@ -1,4 +1,5 @@
 import { parseMediaItem, ParsedMediaMetadata } from './genreParser';
+import { globalPlaylistVault } from './playlistVault';
 
 export interface ChannelGroup {
   channelId: string;
@@ -52,6 +53,9 @@ export const newsChannels = [
 ];
 
 export function buildChannelGroups(rawPlaylistItems: { title: string; url: string }[]): Record<string, ChannelGroup> {
+  // Populate global segregated playlist vaults
+  globalPlaylistVault.populateSegregatedVaults(rawPlaylistItems);
+
   const groups: Record<string, ChannelGroup> = {
     'ch-wstn-101': { channelId: 'ch-wstn-101', channelName: 'Classic Westerns HD', category: 'Westerns', items: [] },
     'ch-crime-102': { channelId: 'ch-crime-102', channelName: 'Classic Cinema & TV Crime', category: 'Crime', items: [] },
@@ -75,3 +79,4 @@ export function buildChannelGroups(rawPlaylistItems: { title: string; url: strin
 
   return groups;
 }
+

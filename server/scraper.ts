@@ -578,17 +578,17 @@ async function fetchArchiveNews(networkQuery: string, networkName: string, exist
 }
 
 export async function runScraper() {
-  const currentStatus = LocalDatabase.getScraperStatus();
+  const currentStatus = await LocalDatabase.getScraperStatus();
   if (currentStatus.status === 'scraping' || currentStatus.status === 'enriching') {
     console.log('Scraper run requested, but it is already running.');
     return;
   }
 
-  const settings = LocalDatabase.getScraperSettings();
-  LocalDatabase.clearScraperLogs();
-  LocalDatabase.addScraperLog('Starting scheduled daily TV guide scraper...');
-  LocalDatabase.addComplianceLog('RUN_SCRAPER', 'Initiated background TV News and EPG metadata sync.');
-  LocalDatabase.updateScraperStatus({
+  const settings = await LocalDatabase.getScraperSettings();
+  await LocalDatabase.clearScraperLogs();
+  await LocalDatabase.addScraperLog('Starting scheduled daily TV guide scraper...');
+  await LocalDatabase.addComplianceLog('RUN_SCRAPER', 'Initiated background TV News and EPG metadata sync.');
+  await LocalDatabase.updateScraperStatus({
     status: 'scraping',
     progress: 10,
     currentTask: 'Initializing stealth headless web client...'
@@ -598,7 +598,7 @@ export async function runScraper() {
     // 1. Stealth Simulation Loop (Rotate UA, Emulate Viewport, delays)
     await sleep(1000);
     const selectedUA = STEALTH_USER_AGENTS[Math.floor(Math.random() * STEALTH_USER_AGENTS.length)];
-    LocalDatabase.addScraperLog(`Rotated stealth User-Agent: "${selectedUA}"`);
+    await LocalDatabase.addScraperLog(`Rotated stealth User-Agent: "${selectedUA}"`);
     const viewportW = settings.viewportWidth || 1920;
     const viewportH = settings.viewportHeight || 1080;
     const minDelay = settings.minDelayMs || 1000;
@@ -608,26 +608,26 @@ export async function runScraper() {
       'https://archive.org/download/daily-highlights/TV%20CRIME_cleaned.m3u'
     ];
 
-    LocalDatabase.addScraperLog(`Emulating viewport dimensions: ${viewportW}x${viewportH}`);
-    LocalDatabase.updateScraperStatus({ progress: 25, currentTask: 'Crawling active channel listings...' });
+    await LocalDatabase.addScraperLog(`Emulating viewport dimensions: ${viewportW}x${viewportH}`);
+    await LocalDatabase.updateScraperStatus({ progress: 25, currentTask: 'Crawling active channel listings...' });
 
     // Emulating random delay loops to resemble human browse rates
     const delay = Math.floor(Math.random() * (maxDelay - minDelay)) + minDelay;
-    LocalDatabase.addScraperLog(`Simulating browser delay to bypass cloud scrapers: ${delay}ms`);
+    await LocalDatabase.addScraperLog(`Simulating browser delay to bypass cloud scrapers: ${delay}ms`);
     await sleep(delay);
 
-    LocalDatabase.addScraperLog(`Parsing guide feeds from endpoints: ${targetsList.join(', ')}`);
-    LocalDatabase.updateScraperStatus({ progress: 40, currentTask: 'Scraping and normalizing channel lineup...' });
+    await LocalDatabase.addScraperLog(`Parsing guide feeds from endpoints: ${targetsList.join(', ')}`);
+    await LocalDatabase.updateScraperStatus({ progress: 40, currentTask: 'Scraping and normalizing channel lineup...' });
     await sleep(1000);
 
     // Fetch default TV Guide channel template to use as our base feeds
-    let currentChannels = LocalDatabase.getChannels();
+    let currentChannels = await LocalDatabase.getChannels();
     if (!currentChannels || currentChannels.length === 0) {
       currentChannels = JSON.parse(JSON.stringify(CHANNELS_DATA));
     }
 
     // --- REAL-WORLD NEWSREEL SCRAPER FROM ARCHIVE.ORG ---
-    LocalDatabase.addScraperLog('Scraping high-fidelity retro newsreels from Archive.org Advanced Search API (Round-Robin Search Rotation)...');
+    await LocalDatabase.addScraperLog('Scraping high-fidelity retro newsreels from Archive.org Advanced Search API (Round-Robin Search Rotation)...');
     LocalDatabase.updateScraperStatus({ progress: 45, currentTask: 'Querying Archive.org for old/retro news streams...' });
     try {
       // Round-robin search queries for old, retro news and newsreels
@@ -764,15 +764,15 @@ export async function runScraper() {
             ]
           }
         ];
-        LocalDatabase.addScraperLog(`Successfully round-robin rotated and loaded ${randomizedEpisodes.length} live Archive.org retro news clips into Channel 103 (Universal Retro Newsreels).`);
+        await LocalDatabase.addScraperLog(`Successfully round-robin rotated and loaded ${randomizedEpisodes.length} live Archive.org retro news clips into Channel 103 (Universal Retro Newsreels).`);
       }
     } catch (apiErr: any) {
-      LocalDatabase.addScraperLog(`Archive.org retro news segment crawler bypassed: ${apiErr.message}. Retaining fallback newsreels.`);
+      await LocalDatabase.addScraperLog(`Archive.org retro news segment crawler bypassed: ${apiErr.message}. Retaining fallback newsreels.`);
     }
 
     // --- MULTIPLE M3U PARSER & ROUND-ROBIN SCHEDULER FOR CH 102 ---
-    LocalDatabase.addScraperLog('Parsing multiple M3U playlists for Channel 102 (TV Crime, The Fugitive, The Man From U.N.C.L.E., The Sopranos, Total Drama, Hogan\'s Heroes)...');
-    LocalDatabase.updateScraperStatus({ progress: 48, currentTask: 'Fetching and round-robin parsing M3U playlists...' });
+    await LocalDatabase.addScraperLog('Parsing multiple M3U playlists for Channel 102 (TV Crime, The Fugitive, The Man From U.N.C.L.E., The Sopranos, Total Drama, Hogan\'s Heroes)...');
+    await LocalDatabase.updateScraperStatus({ progress: 48, currentTask: 'Fetching and round-robin parsing M3U playlists...' });
 
     try {
       const m3uUrls = [
@@ -843,7 +843,7 @@ export async function runScraper() {
                 source: m3uUrl.split('/').pop() || m3uUrl,
                 items
               });
-              LocalDatabase.addScraperLog(`Successfully parsed M3U [${m3uUrl.split('/').pop()}]: ${items.length} episodes.`);
+              await LocalDatabase.addScraperLog(`Successfully parsed M3U [${m3uUrl.split('/').pop()}]: ${items.length} episodes.`);
             }
           }
         } catch (fetchErr: any) {
@@ -909,15 +909,15 @@ export async function runScraper() {
           }
         ];
 
-        LocalDatabase.addScraperLog(`Successfully built round-robin broadcast lineup of ${activeEpisodes.length} episodes for Channel 102 (Classic Cinema & TV Crime).`);
+        await LocalDatabase.addScraperLog(`Successfully built round-robin broadcast lineup of ${activeEpisodes.length} episodes for Channel 102 (Classic Cinema & TV Crime).`);
       }
     } catch (m3uErr: any) {
-      LocalDatabase.addScraperLog(`M3U playlist scraper bypassed: ${m3uErr.message}. Retaining default Channel 102 schedule.`);
+      await LocalDatabase.addScraperLog(`M3U playlist scraper bypassed: ${m3uErr.message}. Retaining default Channel 102 schedule.`);
     }
 
     // --- ARCHIVE.ORG THIRD EYE OCR CHYRON INGESTION ---
-    LocalDatabase.addScraperLog('Scraping real-time TV news OCR chyrons via Archive.org Third Eye API...');
-    LocalDatabase.updateScraperStatus({ progress: 55, currentTask: 'Querying Archive.org Third Eye for OCR news feeds...' });
+    await LocalDatabase.addScraperLog('Scraping real-time TV news OCR chyrons via Archive.org Third Eye API...');
+    await LocalDatabase.updateScraperStatus({ progress: 55, currentTask: 'Querying Archive.org Third Eye for OCR news feeds...' });
     try {
       // Fetch current filtered feed with 2 hours historical window support
       const hours = 2;
@@ -927,7 +927,7 @@ export async function runScraper() {
       if (thres.ok) {
         const text = await thres.text();
         const lines = text.split('\n');
-        LocalDatabase.addScraperLog(`Third Eye OCR service returned ${lines.length} real-time news chyrons.`);
+        await LocalDatabase.addScraperLog(`Third Eye OCR service returned ${lines.length} real-time news chyrons.`);
         
         const discoveredEpisodes: Episode[] = [];
         let epIndex = 1;
@@ -980,37 +980,37 @@ export async function runScraper() {
           if (newsreelChannel && newsreelChannel.shows && newsreelChannel.shows.length > 0) {
             const mainShow = newsreelChannel.shows[0];
             mainShow.episodes = [...mainShow.episodes, ...discoveredEpisodes];
-            LocalDatabase.addScraperLog(`Successfully merged ${discoveredEpisodes.length} real-time live newscasts (Fox/MSNBC/CNN) into Universal Retro Newsreels lineup!`);
+            await LocalDatabase.addScraperLog(`Successfully merged ${discoveredEpisodes.length} real-time live newscasts (Fox/MSNBC/CNN) into Universal Retro Newsreels lineup!`);
           }
         }
       } else {
-        LocalDatabase.addScraperLog(`Archive.org Third Eye endpoint returned status ${thres.status}.`);
+        await LocalDatabase.addScraperLog(`Archive.org Third Eye endpoint returned status ${thres.status}.`);
       }
     } catch (err: any) {
-      LocalDatabase.addScraperLog(`Third Eye ingestion bypassed: ${err.message}.`);
+      await LocalDatabase.addScraperLog(`Third Eye ingestion bypassed: ${err.message}.`);
     }
 
     // --- LIVE NEWS NETWORK SCRAPER (CNN, FOX, RT, DW, BBC, KPIX, AJN) ---
-    LocalDatabase.addScraperLog('Scraping premium global news segments (CNN, Fox, RT, DW, BBC, KPIX, AJN)...');
-    LocalDatabase.updateScraperStatus({ progress: 50, currentTask: 'Scraping live news feeds from Archive.org...' });
+    await LocalDatabase.addScraperLog('Scraping premium global news segments (CNN, Fox, RT, DW, BBC, KPIX, AJN)...');
+    await LocalDatabase.updateScraperStatus({ progress: 50, currentTask: 'Scraping live news feeds from Archive.org...' });
 
     try {
-      LocalDatabase.addScraperLog('Querying Archive.org for live news uploads and forming fresh_news.json & news.json...');
+      await LocalDatabase.addScraperLog('Querying Archive.org for live news uploads and forming fresh_news.json & news.json...');
       const newsPayload = await buildAndSaveFreshNews();
-      LocalDatabase.addScraperLog(`Successfully scraped ${newsPayload.total} live news episodes across Fox, CNN, BBC, DW, RT, KPIX, and AJN!`);
+      await LocalDatabase.addScraperLog(`Successfully scraped ${newsPayload.total} live news episodes across Fox, CNN, BBC, DW, RT, KPIX, and AJN!`);
 
       // Synchronize channels and write static EPG schedule manifests to disk
-      LocalDatabase.addScraperLog('Syncing channel schedules with 24-hour capping and commercial injection...');
+      await LocalDatabase.addScraperLog('Syncing channel schedules with 24-hour capping and commercial injection...');
       await generateAndRegisterChannels();
-      currentChannels = LocalDatabase.getChannels();
-      LocalDatabase.addScraperLog(`Successfully synchronized all ${currentChannels.length} channels and updated 24-hour EPG schedules!`);
+      currentChannels = await LocalDatabase.getChannels();
+      await LocalDatabase.addScraperLog(`Successfully synchronized all ${currentChannels.length} channels and updated 24-hour EPG schedules!`);
     } catch (newsErr: any) {
-      LocalDatabase.addScraperLog(`Live News Scraper encountered an error: ${newsErr.message}`);
+      await LocalDatabase.addScraperLog(`Live News Scraper encountered an error: ${newsErr.message}`);
     }
 
     // 2. Data Enrichment Pipeline using Gemini
-    LocalDatabase.addScraperLog('Initializing AI metadata enrichment engine...');
-    LocalDatabase.updateScraperStatus({
+    await LocalDatabase.addScraperLog('Initializing AI metadata enrichment engine...');
+    await LocalDatabase.updateScraperStatus({
       status: 'enriching',
       progress: 60,
       currentTask: 'Connecting to Gemini AI Engine for smart summary & trivia creation...'
@@ -1018,7 +1018,7 @@ export async function runScraper() {
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (settings.enrichWithGemini && apiKey) {
-      LocalDatabase.addScraperLog('Using server-side Gemini API key for active metadata synthesis.');
+      await LocalDatabase.addScraperLog('Using server-side Gemini API key for active metadata synthesis.');
       
       try {
         const ai = new GoogleGenAI({
@@ -1032,7 +1032,7 @@ export async function runScraper() {
 
         // Enrich shows one by one to avoid large single payload token blowouts
         for (const channel of currentChannels) {
-          LocalDatabase.addScraperLog(`AI Enrichment: Processing station "${channel.name}"...`);
+          await LocalDatabase.addScraperLog(`AI Enrichment: Processing station "${channel.name}"...`);
           
           for (const show of channel.shows) {
             // Check if show is already fully enriched to save massive API calls and speed up scraping
@@ -1041,11 +1041,11 @@ export async function runScraper() {
             const hasEnrichedEps = show.episodes.length > 0 && show.episodes.every(e => e.funFact && (e as any).runtimeMins);
             
             if (hasCast && hasDetailedDescription && hasEnrichedEps) {
-              LocalDatabase.addScraperLog(`AI Enrichment: Skipping "${show.title}" (already enriched with cast & metadata).`);
+              await LocalDatabase.addScraperLog(`AI Enrichment: Skipping "${show.title}" (already enriched with cast & metadata).`);
               continue;
             }
 
-            LocalDatabase.addScraperLog(`AI Enrichment: Analyzing show "${show.title}"...`);
+            await LocalDatabase.addScraperLog(`AI Enrichment: Analyzing show "${show.title}"...`);
             
             const prompt = `
               You are an expert TV historian, curator, and copywriter.
@@ -1130,31 +1130,31 @@ export async function runScraper() {
                   }
                 }
               }
-              LocalDatabase.addScraperLog(`AI Enrichment: Successfully enriched "${show.title}".`);
+              await LocalDatabase.addScraperLog(`AI Enrichment: Successfully enriched "${show.title}".`);
             } catch (enrichErr: any) {
-              LocalDatabase.addScraperLog(`AI Enrichment fallback: Using procedural cast for "${show.title}" (${enrichErr.message}).`);
+              await LocalDatabase.addScraperLog(`AI Enrichment fallback: Using procedural cast for "${show.title}" (${enrichErr.message}).`);
               (show as any).cast = PROCEDURAL_CASTS[show.id] || [];
             }
 
           }
         }
-        LocalDatabase.addScraperLog('Gemini AI metadata enrichment pipeline completed successfully.');
+        await LocalDatabase.addScraperLog('Gemini AI metadata enrichment pipeline completed successfully.');
 
       } catch (err: any) {
-        LocalDatabase.addScraperLog(`Gemini API connection failed: ${err.message}. Reverting to offline procedural enrichment.`);
+        await LocalDatabase.addScraperLog(`Gemini API connection failed: ${err.message}. Reverting to offline procedural enrichment.`);
         enrichProcedurally(currentChannels);
       }
     } else {
-      LocalDatabase.addScraperLog('Gemini API key is missing or AI enrichment is disabled. Running high-fidelity offline procedural metadata enrichment.');
+      await LocalDatabase.addScraperLog('Gemini API key is missing or AI enrichment is disabled. Running high-fidelity offline procedural metadata enrichment.');
       enrichProcedurally(currentChannels);
     }
 
     // 3. Save Channels back to database
-    runDailySourceUpdate(currentChannels);
-    LocalDatabase.saveChannels(currentChannels);
-    LocalDatabase.addScraperLog(`Daily TV Guide sync complete! Enriched ${currentChannels.length} channels.`);
+    await runDailySourceUpdate(currentChannels);
+    await LocalDatabase.saveChannels(currentChannels);
+    await LocalDatabase.addScraperLog(`Daily TV Guide sync complete! Enriched ${currentChannels.length} channels.`);
     
-    LocalDatabase.updateScraperStatus({
+    await LocalDatabase.updateScraperStatus({
       status: 'completed',
       progress: 100,
       currentTask: 'TV Guide schedule completely synchronized.',
@@ -1163,8 +1163,8 @@ export async function runScraper() {
 
   } catch (error: any) {
     console.error('Scraper Execution Failure: ', error);
-    LocalDatabase.addScraperLog(`Scraper Failed: ${error.message}`);
-    LocalDatabase.updateScraperStatus({
+    await LocalDatabase.addScraperLog(`Scraper Failed: ${error.message}`);
+    await LocalDatabase.updateScraperStatus({
       status: 'failed',
       progress: 100,
       currentTask: `Failed: ${error.message}`
@@ -1252,10 +1252,10 @@ function getEpisodeTimestamp(episode: Episode): number | null {
  * Automatically clears out episodes older than 72 hours for channels marked as 'News',
  * ensuring the network remains current and free of stale, repeated 870-episode segments.
  */
-export function runDailySourceUpdate(channelsList?: Channel[]) {
-  LocalDatabase.addScraperLog('[Daily Source Update] Initiating cleanup of stale episodes older than 72 hours for News channels...');
+export async function runDailySourceUpdate(channelsList?: Channel[]) {
+  await LocalDatabase.addScraperLog('[Daily Source Update] Initiating cleanup of stale episodes older than 72 hours for News channels...');
   
-  const channels = channelsList || LocalDatabase.getChannels();
+  const channels = channelsList || await LocalDatabase.getChannels();
   let updatedCount = 0;
   let removedCount = 0;
 
@@ -1265,7 +1265,7 @@ export function runDailySourceUpdate(channelsList?: Channel[]) {
 
   for (const channel of channels) {
     if (channel.category && channel.category.toLowerCase() === 'news') {
-      LocalDatabase.addScraperLog(`[Daily Source Update] Checking news channel: ${channel.name} (${channel.id})`);
+      await LocalDatabase.addScraperLog(`[Daily Source Update] Checking news channel: ${channel.name} (${channel.id})`);
       
       for (const show of channel.shows) {
         const originalLength = show.episodes.length;
@@ -1290,7 +1290,7 @@ export function runDailySourceUpdate(channelsList?: Channel[]) {
             return timeB - timeA;
           });
           finalEpisodes = sortedOriginals.slice(0, 5);
-          LocalDatabase.addScraperLog(`[Daily Source Update] Safety: Kept the ${finalEpisodes.length} most recent episodes of "${show.title}" to avoid empty guide.`);
+          await LocalDatabase.addScraperLog(`[Daily Source Update] Safety: Kept the ${finalEpisodes.length} most recent episodes of "${show.title}" to avoid empty guide.`);
         }
 
         const removed = originalLength - finalEpisodes.length;
@@ -1298,7 +1298,7 @@ export function runDailySourceUpdate(channelsList?: Channel[]) {
           show.episodes = finalEpisodes;
           removedCount += removed;
           updatedCount++;
-          LocalDatabase.addScraperLog(`[Daily Source Update] Cleaned ${removed} stale episodes from show "${show.title}". New count: ${finalEpisodes.length}`);
+          await LocalDatabase.addScraperLog(`[Daily Source Update] Cleaned ${removed} stale episodes from show "${show.title}". New count: ${finalEpisodes.length}`);
         }
       }
     }
@@ -1306,11 +1306,11 @@ export function runDailySourceUpdate(channelsList?: Channel[]) {
 
   if (updatedCount > 0) {
     if (!channelsList) {
-      LocalDatabase.saveChannels(channels);
+      await LocalDatabase.saveChannels(channels);
     }
-    LocalDatabase.addScraperLog(`[Daily Source Update] Finished cleaning stale episodes. Removed ${removedCount} stale segments across ${updatedCount} news channels.`);
+    await LocalDatabase.addScraperLog(`[Daily Source Update] Finished cleaning stale episodes. Removed ${removedCount} stale segments across ${updatedCount} news channels.`);
   } else {
-    LocalDatabase.addScraperLog('[Daily Source Update] No news channel required stale episode cleanup today.');
+    await LocalDatabase.addScraperLog('[Daily Source Update] No news channel required stale episode cleanup today.');
   }
 }
 
@@ -1341,7 +1341,7 @@ export async function runThirdEyeBackfill(options: {
   }
 
   const thirdEyeUrl = `https://archive.org/services/third-eye.php?${queryParams}`;
-  LocalDatabase.addScraperLog(`[Third Eye Backfill] Starting ingest with URL: ${thirdEyeUrl}`);
+  await LocalDatabase.addScraperLog(`[Third Eye Backfill] Starting ingest with URL: ${thirdEyeUrl}`);
 
   try {
     const res = await rateLimitedFetch(thirdEyeUrl);
@@ -1351,7 +1351,7 @@ export async function runThirdEyeBackfill(options: {
 
     const text = await res.text();
     const lines = text.split('\n');
-    LocalDatabase.addScraperLog(`[Third Eye Backfill] Retrieved ${lines.length} lines of raw TSV data.`);
+    await LocalDatabase.addScraperLog(`[Third Eye Backfill] Retrieved ${lines.length} lines of raw TSV data.`);
 
     const discoveredEpisodes: Episode[] = [];
     let epIndex = 1;
@@ -1400,12 +1400,12 @@ export async function runThirdEyeBackfill(options: {
     }
 
     if (discoveredEpisodes.length === 0) {
-      LocalDatabase.addScraperLog(`[Third Eye Backfill] No new unique segments found in response.`);
+      await LocalDatabase.addScraperLog(`[Third Eye Backfill] No new unique segments found in response.`);
       return { success: true, added: 0, message: 'Backfill complete. No new unique segments were found.' };
     }
 
     // Merge into news.json / ch-news-archive
-    const currentChannels = LocalDatabase.getChannels();
+    const currentChannels = await LocalDatabase.getChannels();
     let newsArchiveChannel = currentChannels.find(ch => ch.id === 'ch-news-archive');
     if (!newsArchiveChannel) {
       newsArchiveChannel = {
@@ -1447,16 +1447,16 @@ export async function runThirdEyeBackfill(options: {
     }
 
     mainShow.episodes = mergedEpisodes;
-    LocalDatabase.saveChannels(currentChannels);
-    LocalDatabase.addScraperLog(`[Third Eye Backfill] Successfully backfilled and merged ${addedCount} unique segments.`);
+    await LocalDatabase.saveChannels(currentChannels);
+    await LocalDatabase.addScraperLog(`[Third Eye Backfill] Successfully backfilled and merged ${addedCount} unique segments.`);
 
     // Rebuild news feeds and sync channel manifests
     try {
       await buildAndSaveFreshNews();
       await generateAndRegisterChannels();
-      LocalDatabase.addScraperLog(`[Third Eye Backfill] Static news feed directories and channel schedules successfully updated.`);
+      await LocalDatabase.addScraperLog(`[Third Eye Backfill] Static news feed directories and channel schedules successfully updated.`);
     } catch (feedErr: any) {
-      LocalDatabase.addScraperLog(`[Third Eye Backfill Warning] Static news feed update failed: ${feedErr.message}`);
+      await LocalDatabase.addScraperLog(`[Third Eye Backfill Warning] Static news feed update failed: ${feedErr.message}`);
     }
 
     return {
@@ -1467,7 +1467,7 @@ export async function runThirdEyeBackfill(options: {
     };
 
   } catch (err: any) {
-    LocalDatabase.addScraperLog(`[Third Eye Backfill Error] ${err.message}`);
+    await LocalDatabase.addScraperLog(`[Third Eye Backfill Error] ${err.message}`);
     throw err;
   }
 }
@@ -1479,7 +1479,7 @@ export async function runThirdEyeBackfill(options: {
  */
 export async function backgroundDurationProber() {
   console.log('[Duration Prober] Starting background duration prober for all default channels...');
-  const channels = LocalDatabase.getChannels();
+  const channels = await LocalDatabase.getChannels();
   let updatedAny = false;
 
   for (const channel of channels) {
@@ -1539,7 +1539,7 @@ export async function backgroundDurationProber() {
   }
 
   if (updatedAny) {
-    LocalDatabase.saveChannels(channels);
+    await LocalDatabase.saveChannels(channels);
     console.log('[Duration Prober] Background prober finished and saved updated channel durations.');
   } else {
     console.log('[Duration Prober] Background prober finished. No updates needed.');

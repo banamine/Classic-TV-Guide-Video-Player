@@ -64,66 +64,7 @@ import {
 
 export default function App() {
   // Primary state holding all channels (initially from playlist data)
-  const [channels, setChannels] = useState<Channel[]>(() => {
-    const initialChannels = [...CHANNELS_DATA];
-    const targetChannelIndex = initialChannels.findIndex(
-      (c) => c.id === 'ch-retro-adventure' || c.name.toLowerCase().includes('classic cinema')
-    );
-    if (targetChannelIndex !== -1) {
-      const otherChannels = initialChannels.filter((_, idx) => idx !== targetChannelIndex);
-      const queues: Array<Array<{ show: Show; episode: Episode }>> = [];
-      otherChannels.forEach((ch) => {
-        const chItems: Array<{ show: Show; episode: Episode }> = [];
-        ch.shows.forEach((show) => {
-          show.episodes.forEach((ep) => {
-            chItems.push({ show, episode: ep });
-          });
-        });
-        if (chItems.length > 0) {
-          queues.push(chItems);
-        }
-      });
-
-      if (queues.length > 0) {
-        const scheduledItems: Array<{ show: Show; episode: Episode }> = [];
-        let hasMore = true;
-        let index = 0;
-        while (hasMore) {
-          hasMore = false;
-          for (let q = 0; q < queues.length; q++) {
-            if (index < queues[q].length) {
-              scheduledItems.push(queues[q][index]);
-              hasMore = true;
-            }
-          }
-          index++;
-        }
-
-        const newShows: Show[] = scheduledItems.map((item, idx) => ({
-          id: `rcs-show-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-          title: item.show.title,
-          description: item.show.description,
-          year: item.show.year,
-          genre: item.show.genre,
-          episodes: [
-            {
-              id: `rcs-ep-${idx}-${Date.now()}`,
-              title: item.episode.title,
-              season: item.episode.season || '1',
-              episodeNumber: item.episode.episodeNumber || String(idx + 1),
-              url: item.episode.url
-            }
-          ]
-        }));
-
-        initialChannels[targetChannelIndex] = {
-          ...initialChannels[targetChannelIndex],
-          shows: newShows
-        };
-      }
-    }
-    return initialChannels;
-  });
+  const [channels, setChannels] = useState<Channel[]>(() => [...CHANNELS_DATA]);
   const [selectedChannel, setSelectedChannel] = useState<Channel>(() => {
     return CHANNELS_DATA[0] || {} as Channel;
   });
@@ -2086,7 +2027,7 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
   const activeChannelStatus = selectedChannel?.status || 'unchecked';
 
   return (
-    <div className="flex flex-col h-screen w-full bg-[#0b0c10] text-[#c5c6c7] font-sans overflow-hidden">
+    <div id="app-root" className="flex flex-col h-screen min-h-screen w-full min-w-full bg-[#0b0c10] text-[#c5c6c7] font-sans overflow-hidden app-root-container">
       {!isWorkspaceOpen ? (
         /* Cinema-First Viewing Mode Layout */
         <div className="relative w-full h-full overflow-hidden select-none">
