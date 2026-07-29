@@ -463,42 +463,19 @@ const NEWS_TEMPLATES = [
   }
 ];
 
-const AJN_TEMPLATES = [
-  { id: 'ajn_20260713_Mon_Alex-Hr1', title: '2026-Jul-13, Monday · Alex Jones Show · Hour 1', url: 'https://ajn.archives.pub/hourly-mp4/HD/Alex-Mon-Hr1.mp4' },
-  { id: 'ajn_20260713_Mon_Alex-Hr2', title: '2026-Jul-13, Monday · Alex Jones Show · Hour 2', url: 'https://ajn.archives.pub/hourly-mp4/HD/Alex-Mon-Hr2.mp4' },
-  { id: 'ajn_20260713_Mon_Alex-Hr3', title: '2026-Jul-13, Monday · Alex Jones Show · Hour 3', url: 'https://ajn.archives.pub/hourly-mp4/HD/Alex-Mon-Hr3.mp4' },
-  { id: 'ajn_20260713_Mon_Alex-Hr4', title: '2026-Jul-13, Monday · Alex Jones Show · Hour 4', url: 'https://ajn.archives.pub/hourly-mp4/HD/Alex-Mon-Hr4.mp4' },
-  { id: 'ajn_20260713_Mon_WarRoom-Hr1', title: '2026-Jul-13, Monday · War Room · Hour 1', url: 'https://ajn.archives.pub/hourly-mp4/HD/WarRoom-Mon-Hr1.mp4' },
-  { id: 'ajn_20260713_Mon_WarRoom-Hr2', title: '2026-Jul-13, Monday · War Room · Hour 2', url: 'https://ajn.archives.pub/hourly-mp4/HD/WarRoom-Mon-Hr2.mp4' },
-  { id: 'ajn_20260713_Mon_WarRoom-Hr3', title: '2026-Jul-13, Monday · War Room · Hour 3', url: 'https://ajn.archives.pub/hourly-mp4/HD/WarRoom-Mon-Hr3.mp4' },
-  { id: 'ajn_20260714_Tue_Alex-Hr1', title: '2026-Jul-14, Tuesday · Alex Jones Show · Hour 1', url: 'https://ajn.archives.pub/hourly-mp4/HD/Alex-Tue-Hr1.mp4' },
-  { id: 'ajn_20260714_Tue_Alex-Hr2', title: '2026-Jul-14, Tuesday · Alex Jones Show · Hour 2', url: 'https://ajn.archives.pub/hourly-mp4/HD/Alex-Tue-Hr2.mp4' },
-  { id: 'ajn_20260714_Tue_Alex-Hr3', title: '2026-Jul-14, Tuesday · Alex Jones Show · Hour 3', url: 'https://ajn.archives.pub/hourly-mp4/HD/Alex-Tue-Hr3.mp4' },
-  { id: 'ajn_20260714_Tue_Alex-Hr4', title: '2026-Jul-14, Tuesday · Alex Jones Show · Hour 4', url: 'https://ajn.archives.pub/hourly-mp4/HD/Alex-Tue-Hr4.mp4' },
-  { id: 'ajn_20260708_Wed_Alex-Hr1', title: '2026-Jul-08, Wednesday · Alex Jones Show · Hour 1', url: 'https://ajn.archives.pub/hourly-mp4/HD/Alex-Wed-Hr1.mp4' },
-  { id: 'ajn_20260708_Wed_Alex-Hr2', title: '2026-Jul-08, Wednesday · Alex Jones Show · Hour 2', url: 'https://ajn.archives.pub/hourly-mp4/HD/Alex-Wed-Hr2.mp4' },
-  { id: 'ajn_20260708_Wed_Alex-Hr3', title: '2026-Jul-08, Wednesday · Alex Jones Show · Hour 3', url: 'https://ajn.archives.pub/hourly-mp4/HD/Alex-Wed-Hr3.mp4' },
-  { id: 'ajn_20260708_Wed_Alex-Hr4', title: '2026-Jul-08, Wednesday · Alex Jones Show · Hour 4', url: 'https://ajn.archives.pub/hourly-mp4/HD/Alex-Wed-Hr4.mp4' },
-  { id: 'ajn_20260708_Wed_WarRoom-Hr1', title: '2026-Jul-08, Wednesday · War Room · Hour 1', url: 'https://ajn.archives.pub/hourly-mp4/HD/WarRoom-Wed-Hr1.mp4' },
-  { id: 'ajn_20260708_Wed_WarRoom-Hr2', title: '2026-Jul-08, Wednesday · War Room · Hour 2', url: 'https://ajn.archives.pub/hourly-mp4/HD/WarRoom-Wed-Hr2.mp4' },
-  { id: 'ajn_20260708_Wed_WarRoom-Hr3', title: '2026-Jul-08, Wednesday · War Room · Hour 3', url: 'https://ajn.archives.pub/hourly-mp4/HD/WarRoom-Wed-Hr3.mp4' },
-  { id: 'ajn_20260709_Thu_Alex-Hr1', title: '2026-Jul-09, Thursday · Alex Jones Show · Hour 1', url: 'https://ajn.archives.pub/hourly-mp4/HD/Alex-Thu-Hr1.mp4' },
-  { id: 'ajn_20260709_Thu_Alex-Hr2', title: '2026-Jul-09, Thursday · Alex Jones Show · Hour 2', url: 'https://ajn.archives.pub/hourly-mp4/HD/Alex-Thu-Hr2.mp4' },
-  { id: 'ajn_20260709_Thu_Alex-Hr3', title: '2026-Jul-09, Thursday · Alex Jones Show · Hour 3', url: 'https://ajn.archives.pub/hourly-mp4/HD/Alex-Thu-Hr3.mp4' },
-  { id: 'ajn_20260709_Thu_Alex-Hr4', title: '2026-Jul-09, Thursday · Alex Jones Show · Hour 4', url: 'https://ajn.archives.pub/hourly-mp4/HD/Alex-Thu-Hr4.mp4' },
-  { id: 'ajn_20260709_Thu_WarRoom-Hr1', title: '2026-Jul-09, Thursday · War Room · Hour 1', url: 'https://ajn.archives.pub/hourly-mp4/HD/WarRoom-Thu-Hr1.mp4' },
-  { id: 'ajn_20260709_Thu_WarRoom-Hr2', title: '2026-Jul-09, Thursday · War Room · Hour 2', url: 'https://ajn.archives.pub/hourly-mp4/HD/WarRoom-Thu-Hr2.mp4' },
-  { id: 'ajn_20260709_Thu_WarRoom-Hr3', title: '2026-Jul-09, Thursday · War Room · Hour 3', url: 'https://ajn.archives.pub/hourly-mp4/HD/WarRoom-Thu-Hr3.mp4' }
-];
-
 function getRecentWeekdayDate(weekdayName: string): { dateStr: string; label: string } {
   const currentDate = new Date();
   const dayOfWeekMap: Record<string, number> = {
     'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6
   };
   const targetDay = dayOfWeekMap[weekdayName];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  
   if (targetDay === undefined) {
-    return { dateStr: '20260714', label: '2026-Jul-14' };
+    const d = new Date(currentDate);
+    const monthNum = String(d.getMonth() + 1).padStart(2, '0');
+    const dayStr = String(d.getDate()).padStart(2, '0');
+    return { dateStr: `${d.getFullYear()}${monthNum}${dayStr}`, label: `${d.getFullYear()}-${months[d.getMonth()]}-${dayStr}` };
   }
   
   const d = new Date(currentDate);
@@ -510,7 +487,6 @@ function getRecentWeekdayDate(weekdayName: string): { dateStr: string; label: st
   d.setDate(d.getDate() - diff);
   
   const year = d.getFullYear();
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const monthName = months[d.getMonth()];
   const dayStr = String(d.getDate()).padStart(2, '0');
   
@@ -519,6 +495,37 @@ function getRecentWeekdayDate(weekdayName: string): { dateStr: string; label: st
   const label = `${year}-${monthName}-${dayStr}`;
   return { dateStr, label };
 }
+
+function getDynamicAjnTemplates() {
+  const weekdays = [
+    { code: 'Mon', name: 'Monday' },
+    { code: 'Tue', name: 'Tuesday' },
+    { code: 'Wed', name: 'Wednesday' },
+    { code: 'Thu', name: 'Thursday' }
+  ];
+  const templates: { id: string; title: string; url: string }[] = [];
+
+  for (const w of weekdays) {
+    const { dateStr, label } = getRecentWeekdayDate(w.code);
+    for (let hr = 1; hr <= 4; hr++) {
+      templates.push({
+        id: `ajn_${dateStr}_${w.code}_Alex-Hr${hr}`,
+        title: `${label}, ${w.name} · Alex Jones Show · Hour ${hr}`,
+        url: `https://ajn.archives.pub/hourly-mp4/HD/Alex-${w.code}-Hr${hr}.mp4`
+      });
+    }
+    for (let hr = 1; hr <= 3; hr++) {
+      templates.push({
+        id: `ajn_${dateStr}_${w.code}_WarRoom-Hr${hr}`,
+        title: `${label}, ${w.name} · War Room · Hour ${hr}`,
+        url: `https://ajn.archives.pub/hourly-mp4/HD/WarRoom-${w.code}-Hr${hr}.mp4`
+      });
+    }
+  }
+  return templates;
+}
+
+const AJN_TEMPLATES = getDynamicAjnTemplates();
 
 export async function buildAndSaveFreshNews(manualPayload?: any) {
   const currentDate = new Date();
@@ -529,14 +536,11 @@ export async function buildAndSaveFreshNews(manualPayload?: any) {
     const jsonStr = JSON.stringify(manualPayload, null, 2);
     const savePaths = [
       path.join(process.cwd(), 'public', 'fresh_news.json'),
-      path.join(process.cwd(), 'public', 'news.json'),
-      path.join(process.cwd(), 'fresh_news.json'),
-      path.join(process.cwd(), 'news.json')
+      path.join(process.cwd(), 'fresh_news.json')
     ];
     const distPath = path.join(process.cwd(), 'dist');
     if (fs.existsSync(distPath)) {
       savePaths.push(path.join(distPath, 'fresh_news.json'));
-      savePaths.push(path.join(distPath, 'news.json'));
     }
     savePaths.forEach(p => {
       try {
@@ -820,16 +824,13 @@ export async function buildAndSaveFreshNews(manualPayload?: any) {
 
   const savePaths = [
     path.join(process.cwd(), 'public', 'fresh_news.json'),
-    path.join(process.cwd(), 'public', 'news.json'),
-    path.join(process.cwd(), 'fresh_news.json'),
-    path.join(process.cwd(), 'news.json')
+    path.join(process.cwd(), 'fresh_news.json')
   ];
 
   // Try saving to dist if it exists
   const distPath = path.join(process.cwd(), 'dist');
   if (fs.existsSync(distPath)) {
     savePaths.push(path.join(distPath, 'fresh_news.json'));
-    savePaths.push(path.join(distPath, 'news.json'));
   }
 
   savePaths.forEach(p => {

@@ -14,7 +14,8 @@ import { CinemaEPGGuide } from './components/CinemaEPGGuide';
 import { DiagnosticConsole } from './components/DiagnosticConsole';
 import { ScraperDashboard } from './components/ScraperDashboard';
 import { CommercialFillModal } from './components/CommercialFillModal';
-import { parseM3U, exportM3U, exportCSV } from './utils/m3uParser';
+import { StationEditModal } from './components/StationEditModal';
+import { parseM3U, exportM3U, exportCSV, fetchAndParseJsonPlaylist } from './utils/m3uParser';
 import { parseMasterPlaylistJSON } from './utils/broadcastEngine';
 import { generateStaticPlayerHtml } from './utils/staticPlayerGenerator';
 import {
@@ -59,7 +60,8 @@ import {
   Cpu,
   RefreshCw,
   Star,
-  StarOff
+  StarOff,
+  Edit3
 } from 'lucide-react';
 
 export default function App() {
@@ -1564,59 +1566,161 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
     setEditingValue(value);
   };
 
-  const saveCellEdit = () => {
+  const saveCellEdit = async () => {
     if (!editingChannelId || !editingFieldName) return;
 
-    setChannels((prev) =>
-      prev.map((ch) => {
-        if (ch.id === editingChannelId) {
-          const updated = { ...ch };
-          if (editingFieldName === 'number') {
-            updated.number = editingValue;
-          } else if (editingFieldName === 'name') {
-            updated.name = editingValue;
-          } else if (editingFieldName === 'group') {
-            updated.category = editingValue;
-          } else if (editingFieldName === 'url') {
-            updated.url = editingValue;
-            if (updated.shows?.[0]?.episodes?.[0]) {
-              updated.shows[0].episodes[0].url = editingValue;
-            }
-          } else if (editingFieldName === 'nowPlaying') {
-            if (updated.shows?.[0]) {
-              updated.shows[0].title = editingValue;
-            }
-          } else if (editingFieldName === 'tags') {
-            const parsedTags: Record<string, string> = {};
-            editingValue.split(',').forEach((part) => {
-              const trimmed = part.trim();
-              if (!trimmed) return;
-              const eqIdx = trimmed.indexOf('=');
-              const colIdx = trimmed.indexOf(':');
-              const splitIdx = eqIdx !== -1 ? eqIdx : colIdx;
-              if (splitIdx !== -1) {
-                const key = trimmed.substring(0, splitIdx).trim();
-                const val = trimmed.substring(splitIdx + 1).trim();
-                if (key) parsedTags[key] = val;
-              } else {
-                parsedTags[trimmed] = 'true';
+    const updatedChannels = channels.map((ch) => {
+      if (ch.id === editingChannelId) {
+        const updated = { ...ch };
+        if (editingFieldName === 'number') {
+          updated.number = editingValue;
+        } else if (editingFieldName === 'name') {
+          updated.name = editingValue;
+        } else if (editingFieldName === 'group') {
+          updated.category = editingValue;
+        } else if (editingFieldName === 'url') {
+          const oldUrl = ch.url;
+          updated.url = editingValue;
+          if (updated.shows && updated.shows.length > 0) {
+            updated.shows = updated.shows.map((s) => ({
+              ...s,
+              episodes: (s.episodes || []).map((e) => {
+                if (!e.url || e.url === oldUrl || (updated.shows.length === 1 && s.episodes.length === 1)) {
+                  return { ...e, url: editingValue };
+                }
+                return e;
+              })
+            }));
+          } else {
+            updated.shows = [
+              {
+                id: `show-${ch.id}`,
+                title: ch.name || 'Live Broadcast',
+                description: 'Custom Channel Broadcast',
+                year: '2026',
+                genre: ch.category || 'General',
+                episodes: [
+                  {
+                    id: `ep-${ch.id}`,
+                    title: ch.name || 'Live Stream',
+                    url: editingValue,
+                    durationMs: 86400000,
+                    runtimeMins: 1440
+                  }
+                ]
               }
-            });
-            updated.customTags = parsedTags;
+            ];
           }
-          return updated;
+        } else if (editingFieldName === 'nowPlaying') {
+          if (updated.shows?.[0]) {
+            updated.shows[0].title = editingValue;
+            if (updated.shows[0].episodes?.[0]) {
+              updated.shows[0].episodes[0].title = editingValue;
+            }
+          }
+        } else if (editingFieldName === 'tags') {
+          const parsedTags: Record<string, string> = {};
+          editingValue.split(',').forEach((part) => {
+            const trimmed = part.trim();
+            if (!trimmed) return;
+            const eqIdx = trimmed.indexOf('=');
+            const colIdx = trimmed.indexOf(':');
+            const splitIdx = eqIdx !== -1 ? eqIdx : colIdx;
+            if (splitIdx !== -1) {
+              const key = trimmed.substring(0, splitIdx).trim();
+              const val = trimmed.substring(splitIdx + 1).trim();
+              if (key) parsedTags[key] = val;
+            } else {
+              parsedTags[trimmed] = 'true';
+            }
+          });
+          updated.customTags = parsedTags;
         }
-        return ch;
-      })
-    );
+        return updated;
+      }
+      return ch;
+    });
+
+    setChannels(updatedChannels);
+
+    if (selectedChannel && selectedChannel.id === editingChannelId) {
+      const editedCh = updatedChannels.find((c) => c.id === editingChannelId);
+      if (editedCh) {
+        handleSelectChannel(editedCh);
+      }
+    }
+
+    // Persist updated metadata to backend database so channel-to-file mappings remain synchronized
+    try {
+      await fetch('/api/channels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedChannels),
+      });
+    } catch (err: any) {
+      console.error('[Channel Sync] Failed to persist edited channel metadata:', err);
+    }
 
     logMessage('custom', `Updated field "${editingFieldName}" value to "${editingValue}"`);
     setEditingChannelId(null);
     setEditingFieldName(null);
   };
 
+  // CREATE NEW CHANNEL
+  const handleAddChannel = async () => {
+    const newNum = String(101 + channels.length);
+    const newChannel: Channel = {
+      id: `ch-custom-${Date.now()}`,
+      number: newNum,
+      name: `Custom Station ${newNum}`,
+      category: 'User Stations',
+      tagline: 'Custom stream broadcast',
+      logoText: 'CUSTOM',
+      accentColor: '#8b5cf6',
+      url: 'https://archive.org/download/classic_tv_commercials/station_id_slate.mp4',
+      shows: [
+        {
+          id: `show-custom-${Date.now()}`,
+          title: `Custom Live Broadcast`,
+          description: 'User created custom channel broadcast',
+          year: '2026',
+          genre: 'User Stations',
+          episodes: [
+            {
+              id: `ep-custom-${Date.now()}`,
+              title: 'Live Custom Feed',
+              url: 'https://archive.org/download/classic_tv_commercials/station_id_slate.mp4',
+              durationMs: 86400000,
+              runtimeMins: 1440
+            }
+          ]
+        }
+      ]
+    };
+
+    const updated = [...channels, newChannel];
+    setChannels(updated);
+    setSelectedCategory('All');
+    setSearchQuery('');
+    setSelectedTagFilter('All');
+    setShowFavoritesOnly(false);
+    handleSelectChannel(newChannel);
+    setSelectedRowId(newChannel.id);
+    logMessage('custom', `Created new channel CH ${newChannel.number} "${newChannel.name}". You can double-click any cell in the matrix grid to edit URL, name, or category.`);
+
+    try {
+      await fetch('/api/channels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+    } catch (err: any) {
+      console.error('[Add Channel Sync] Failed to save new channel:', err);
+    }
+  };
+
   // DELETE CHANNEL
-  const deleteChannel = (channelId: string) => {
+  const deleteChannel = async (channelId: string) => {
     const target = channels.find((c) => c.id === channelId);
     const updated = channels.filter((c) => c.id !== channelId);
     setChannels(updated);
@@ -1624,6 +1728,16 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
 
     if (selectedChannel.id === channelId && updated.length > 0) {
       handleSelectChannel(updated[0]);
+    }
+
+    try {
+      await fetch('/api/channels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+    } catch (err: any) {
+      console.error('[Channel Sync] Failed to sync channel deletion to database:', err);
     }
   };
 
@@ -2279,6 +2393,17 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
           >
             <Globe className="w-3.5 h-3.5" />
             <span>IMPORT URL</span>
+          </button>
+
+          {/* CREATE NEW CHANNEL */}
+          <button
+            onClick={handleAddChannel}
+            className="px-3 py-1.5 bg-purple-950/40 hover:bg-purple-900/50 border border-purple-700/50 hover:border-purple-600/70 text-purple-300 text-[11px] font-black rounded-md flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-md shadow-purple-950/30"
+            title="Create a new custom channel"
+            id="btn-matrix-add-channel"
+          >
+            <Plus className="w-3.5 h-3.5 text-purple-400" />
+            <span>+ ADD CHANNEL</span>
           </button>
 
           {/* FETCH EPG */}
@@ -4178,17 +4303,17 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
 
       {/* 5. MODAL: IMPORT REMOTE URL */}
       {showImportUrlModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#121319] border border-purple-900/30 rounded-xl p-5 max-w-md w-full flex flex-col gap-4">
-            <div className="flex items-center justify-between border-b border-purple-950/20 pb-2">
-              <h3 className="font-bold text-white text-sm flex items-center gap-2">
-                <Globe className="w-4 h-4 text-purple-400" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-[#121319] border border-purple-900/30 rounded-xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto my-auto min-w-0 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-purple-950/20 pb-2 gap-2 min-w-0">
+              <h3 className="font-bold text-white text-sm flex items-center gap-2 truncate">
+                <Globe className="w-4 h-4 text-purple-400 shrink-0" />
                 Import Remote M3U Link
               </h3>
-              <button onClick={() => setShowImportUrlModal(false)} className="text-gray-500 hover:text-white">✕</button>
+              <button onClick={() => setShowImportUrlModal(false)} className="text-gray-500 hover:text-white shrink-0">✕</button>
             </div>
-            <div className="space-y-2">
-              <p className="text-[11px] text-gray-400 leading-relaxed">
+            <div className="space-y-2 min-w-0">
+              <p className="text-[11px] text-gray-400 leading-relaxed break-words">
                 Provide any online `.m3u` or `.m3u8` playlist address. Since sandbox containers enforce strict CORS checks, a high-fidelity template with sports and news channels is parsed if a sample URL is used.
               </p>
               <input
@@ -4199,7 +4324,7 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                 className="w-full bg-black border border-purple-950/50 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
               />
             </div>
-            <div className="flex items-center justify-end gap-2 mt-2">
+            <div className="flex items-center justify-end gap-2 mt-2 shrink-0">
               <button
                 onClick={() => setShowImportUrlModal(false)}
                 className="px-3 py-1.5 bg-gray-900 hover:bg-gray-800 rounded text-xs text-gray-300"
@@ -4219,17 +4344,17 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
 
       {/* 6. MODAL: FETCH EPG */}
       {showFetchEpgModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#121319] border border-purple-900/30 rounded-xl p-5 max-w-md w-full flex flex-col gap-4">
-            <div className="flex items-center justify-between border-b border-purple-950/20 pb-2">
-              <h3 className="font-bold text-white text-sm flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-purple-400" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-[#121319] border border-purple-900/30 rounded-xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto my-auto min-w-0 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-purple-950/20 pb-2 gap-2 min-w-0">
+              <h3 className="font-bold text-white text-sm flex items-center gap-2 truncate">
+                <Calendar className="w-4 h-4 text-purple-400 shrink-0" />
                 Fetch XMLTV EPG Guide
               </h3>
-              <button onClick={() => setShowFetchEpgModal(false)} className="text-gray-500 hover:text-white">✕</button>
+              <button onClick={() => setShowFetchEpgModal(false)} className="text-gray-500 hover:text-white shrink-0">✕</button>
             </div>
-            <div className="space-y-2">
-              <p className="text-[11px] text-gray-400 leading-relaxed">
+            <div className="space-y-2 min-w-0">
+              <p className="text-[11px] text-gray-400 leading-relaxed break-words">
                 Download television program schedules from XML EPG feeds. This parses guide listings and syncs them automatically to the channel names in the main matrix.
               </p>
               <input
@@ -4240,7 +4365,7 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                 className="w-full bg-black border border-purple-950/50 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
               />
             </div>
-            <div className="flex items-center justify-end gap-2 mt-2">
+            <div className="flex items-center justify-end gap-2 mt-2 shrink-0">
               <button
                 onClick={() => setShowFetchEpgModal(false)}
                 className="px-3 py-1.5 bg-gray-900 hover:bg-gray-800 rounded text-xs text-gray-300"
@@ -4260,27 +4385,27 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
 
       {/* 7. MODAL: BACKUP URLS */}
       {showBackupsModal && backupChannelId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#121319] border border-purple-900/30 rounded-xl p-5 max-w-md w-full flex flex-col gap-4">
-            <div className="flex items-center justify-between border-b border-purple-950/20 pb-2">
-              <h3 className="font-bold text-white text-sm flex items-center gap-2">
-                <Plus className="w-4 h-4 text-purple-400" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-[#121319] border border-purple-900/30 rounded-xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto my-auto min-w-0 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-purple-950/20 pb-2 gap-2 min-w-0">
+              <h3 className="font-bold text-white text-sm flex items-center gap-2 truncate">
+                <Plus className="w-4 h-4 text-purple-400 shrink-0" />
                 Manage Backup Stream URLs
               </h3>
-              <button onClick={() => setShowBackupsModal(false)} className="text-gray-500 hover:text-white">✕</button>
+              <button onClick={() => setShowBackupsModal(false)} className="text-gray-500 hover:text-white shrink-0">✕</button>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-3 min-w-0">
               <div className="flex gap-2">
                 <input
                   type="text"
                   placeholder="Paste backup URL stream link"
                   value={newBackupUrl}
                   onChange={(e) => setNewBackupUrl(e.target.value)}
-                  className="flex-1 bg-black border border-purple-950/50 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-purple-600"
+                  className="flex-1 bg-black border border-purple-950/50 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-purple-600 min-w-0"
                 />
                 <button
                   onClick={addBackupUrl}
-                  className="px-3 bg-purple-700 hover:bg-purple-600 text-white rounded-lg text-xs font-bold"
+                  className="px-3 bg-purple-700 hover:bg-purple-600 text-white rounded-lg text-xs font-bold shrink-0"
                 >
                   Add
                 </button>
@@ -4289,11 +4414,11 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
               <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                 <h4 className="text-[10px] text-gray-500 font-mono uppercase tracking-widest">Active Backup Links:</h4>
                 {(channels.find((c) => c.id === backupChannelId)?.backupUrls || []).map((url, i) => (
-                  <div key={i} className="flex items-center justify-between p-2 bg-black/30 border border-gray-800 rounded text-[11px] font-mono">
-                    <span className="truncate pr-4 text-gray-300">{url}</span>
+                  <div key={i} className="flex items-center justify-between p-2 bg-black/30 border border-gray-800 rounded text-[11px] font-mono gap-2 min-w-0">
+                    <span className="truncate text-gray-300 min-w-0 flex-1">{url}</span>
                     <button
                       onClick={() => removeBackupUrl(i)}
-                      className="text-red-400 hover:text-red-300 font-bold"
+                      className="text-red-400 hover:text-red-300 font-bold shrink-0"
                     >
                       Delete
                     </button>
@@ -4304,7 +4429,7 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                 )}
               </div>
             </div>
-            <div className="flex justify-end mt-2">
+            <div className="flex justify-end mt-2 shrink-0">
               <button
                 onClick={() => setShowBackupsModal(false)}
                 className="px-4 py-1.5 bg-gray-900 hover:bg-gray-800 rounded text-xs text-gray-300"
@@ -4318,23 +4443,23 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
 
       {/* 8. MODAL: SCHEDULE / TV GUIDE */}
       {showTvGuideModal && selectedChannel && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#121319] border border-purple-900/30 rounded-xl p-5 max-w-md w-full flex flex-col gap-4">
-            <div className="flex items-center justify-between border-b border-purple-950/20 pb-2">
-              <h3 className="font-bold text-white text-sm flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-purple-400" />
-                Schedule Program: {selectedChannel.name}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-[#121319] border border-purple-900/30 rounded-xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto my-auto min-w-0 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-purple-950/20 pb-2 gap-2 min-w-0">
+              <h3 className="font-bold text-white text-sm flex items-center gap-2 truncate">
+                <Calendar className="w-4 h-4 text-purple-400 shrink-0" />
+                <span className="truncate">Schedule Program: {selectedChannel.name}</span>
               </h3>
-              <button onClick={() => setShowTvGuideModal(false)} className="text-gray-500 hover:text-white">✕</button>
+              <button onClick={() => setShowTvGuideModal(false)} className="text-gray-500 hover:text-white shrink-0">✕</button>
             </div>
 
             {selectedChannel && (selectedChannel.id === 'ch-retro-adventure' || selectedChannel.name.toLowerCase().includes('classic cinema')) && (
-              <div className="p-3 bg-purple-950/20 border border-purple-900/30 rounded-lg space-y-2 text-left">
+              <div className="p-3 bg-purple-950/20 border border-purple-900/30 rounded-lg space-y-2 text-left min-w-0">
                 <div className="flex items-center gap-1.5 text-purple-400 font-bold text-xs font-mono uppercase">
-                  <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
+                  <Sparkles className="w-4 h-4 text-purple-400 animate-pulse shrink-0" />
                   <span>Fair Play Auto-Broadcaster</span>
                 </div>
-                <p className="text-[10px] text-gray-400 leading-normal">
+                <p className="text-[10px] text-gray-400 leading-normal break-words">
                   Skip manual input! Automatically build a continuous daily schedule of programs from all other active channels/loaded files in a fair-play round-robin loop.
                 </p>
                 <button
@@ -4345,7 +4470,7 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                   }}
                   className="w-full py-1.5 bg-purple-700 hover:bg-purple-600 border border-purple-600 text-white text-xs font-bold rounded-md transition-colors uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: '4s' }} />
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" style={{ animationDuration: '4s' }} />
                   <span>Configure & Build Smart Schedule</span>
                 </button>
               </div>
@@ -4363,7 +4488,7 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                 handleAddScheduleShow(title, desc, genre, url);
                 setShowTvGuideModal(false);
               }}
-              className="space-y-3"
+              className="space-y-3 min-w-0"
             >
               <div className="space-y-1 text-left">
                 <label className="text-[10px] text-gray-400 font-mono uppercase">Show Title / Program Name</label>
@@ -4406,7 +4531,7 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="flex items-center justify-end gap-2 pt-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowTvGuideModal(false)}
@@ -4428,8 +4553,8 @@ https://archive.org/download/s-01e-02.-point-blank/Maverick%20S02e01%20-%20The%2
 
       {/* 9. MODAL: ADVANCED AUTO-SCHEDULER CONFIGURATOR */}
       {showAutoSchedulerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fade-in">
-          <div className="bg-[#0f1016] border border-purple-500/30 rounded-2xl p-6 max-w-lg w-full flex flex-col gap-5 shadow-2xl shadow-purple-950/40 text-left">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-[#0f1016] border border-purple-500/30 rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto my-auto min-w-0 flex flex-col gap-5 shadow-2xl shadow-purple-950/40 text-left">
             <div className="flex items-center justify-between border-b border-purple-950/40 pb-3">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-purple-400 animate-pulse" />

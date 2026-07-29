@@ -5,13 +5,14 @@
 
 import React, { useState } from 'react';
 import { Channel } from '../types';
-import { Radio, Search, Tv, Film, Play, ChevronRight, Hash, Sparkles } from 'lucide-react';
+import { Radio, Search, Tv, Film, Play, ChevronRight, Hash, Sparkles, Edit3 } from 'lucide-react';
 import { getLiveEpisodeForChannel } from '../utils/scheduler';
 
 interface StationDirectoryProps {
   channels: Channel[];
   selectedChannel: Channel | null;
   onSelectChannel: (channel: Channel) => void;
+  onEditChannel?: (channel: Channel) => void;
   isOpen: boolean;
   currentTimeMs: number;
 }
@@ -20,6 +21,7 @@ export function StationDirectory({
   channels,
   selectedChannel,
   onSelectChannel,
+  onEditChannel,
   isOpen,
   currentTimeMs,
 }: StationDirectoryProps) {
@@ -164,7 +166,20 @@ export function StationDirectory({
                   </div>
                 </div>
 
-                <div className="pl-2 flex items-center shrink-0">
+                <div className="pl-2 flex items-center gap-1 shrink-0">
+                  {onEditChannel && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEditChannel(ch);
+                      }}
+                      className="p-1 text-white/30 hover:text-purple-300 hover:bg-purple-900/40 rounded transition-colors"
+                      title="Edit station titles & stream URL"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <ChevronRight className="w-3.5 h-3.5 text-white/20 group-hover:text-purple-400 group-hover:translate-x-0.5 transition-all" />
                 </div>
               </button>

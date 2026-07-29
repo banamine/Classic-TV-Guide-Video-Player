@@ -54,21 +54,101 @@ function loadCommercials(): Episode[] {
 function applyCommercialsAnd24hCap(channel: Channel, isNews: boolean, commercials: Episode[]): Channel {
   if (!channel.shows || channel.shows.length === 0) return channel;
 
-  // Preserve distinct show structure while ensuring episodes have clean duration and runtime fields
-  const updatedShows: Show[] = channel.shows.map((show) => {
-    const cleanedEpisodes = (show.episodes || []).map((ep) => {
-      const epSec = Math.round((ep.durationMs || (ep.runtimeMins ? ep.runtimeMins * 60 : 1800)) / 1000);
-      return {
-        ...ep,
-        durationMs: epSec * 1000,
-        runtimeMins: Math.ceil(epSec / 60),
-        isFiller: false
-      };
-    });
+  const defaultComm: Episode = commercials[0] || {
+    id: 'comm-interstitial-default',
+    title: 'Station Break & Retro Commercial Interstitial',
+    season: '1',
+    episodeNumber: '1',
+    url: 'https://archive.org/download/classic_tv_commercials/station_id_slate.mp4',
+    durationMs: 30000,
+    runtimeMins: 1,
+    isFiller: true,
+    funFact: 'Retro Broadcast Interstitial Slate'
+  };
 
+  // Flatten all raw main episodes across shows
+  const rawEpisodes: Episode[] = [];
+  channel.shows.forEach((show) => {
+    (show.episodes || []).forEach((ep) => {
+      if (!ep.isFiller) rawEpisodes.push(ep);
+    });
+  });
+
+  if (rawEpisodes.length === 0) return channel;
+
+  const TARGET_24H_SEC = 86400;
+  const cappedEpisodes: Episode[] = [];
+  let currentTotalSec = 0;
+  let itemIdx = 0;
+
+  // Fill up to 24 hours (86,400 seconds)
+  while (currentTotalSec < TARGET_24H_SEC - 30) {
+    const rawEp = rawEpisodes[itemIdx % rawEpisodes.length];
+    const epSec = Math.round((rawEp.durationMs || (rawEp.runtimeMins ? rawEp.runtimeMins * 60 : 1800)) / 1000);
+
+    // If adding this episode would exceed 86,370s, break to insert final backfill slate
+    if (currentTotalSec + epSec > TARGET_24H_SEC - 30 && cappedEpisodes.length > 0) {
+      break;
+    }
+
+    const cleanEp: Episode = {
+      ...rawEp,
+      id: `${rawEp.id}-seq-${cappedEpisodes.length + 1}`,
+      durationMs: epSec * 1000,
+      runtimeMins: Math.ceil(epSec / 60),
+      isFiller: false
+    };
+
+    cappedEpisodes.push(cleanEp);
+    currentTotalSec += epSec;
+    itemIdx++;
+
+    // Commercial insertion rule
+    const shouldAddComm = isNews ? epSec > 1200 : true;
+    if (shouldAddComm) {
+      const commIdx = itemIdx % (commercials.length || 1);
+      const chosenComm = commercials[commIdx] || defaultComm;
+      const commSec = Math.round((chosenComm.durationMs || 30000) / 1000);
+
+      if (currentTotalSec + commSec <= TARGET_24H_SEC - 30) {
+        cappedEpisodes.push({
+          ...chosenComm,
+          id: `comm-break-${channel.id}-${cappedEpisodes.length + 1}`,
+          durationMs: commSec * 1000,
+          runtimeMins: Math.ceil(commSec / 60),
+          isFiller: true
+        });
+        currentTotalSec += commSec;
+      }
+    }
+  }
+
+  // Calculate remaining dead-air gap to reach EXACTLY 86,400s
+  const remainingSec = TARGET_24H_SEC - currentTotalSec;
+  if (remainingSec > 0) {
+    const finalSlateComm = commercials[0] || defaultComm;
+    cappedEpisodes.push({
+      ...finalSlateComm,
+      id: `comm-slate-backfill-${channel.id}`,
+      title: 'Station ID & Interstitial Slate',
+      durationMs: remainingSec * 1000,
+      runtimeMins: Math.max(1, Math.round(remainingSec / 60)),
+      isFiller: true,
+      funFact: '24-Hour Epoch Alignment Station Slate'
+    });
+  }
+
+  // Re-assign capped episodes to show 0 while keeping show metadata intact
+  const updatedShows: Show[] = channel.shows.map((show, idx) => {
+    if (idx === 0) {
+      return {
+        ...show,
+        episodes: cappedEpisodes
+      };
+    }
     return {
       ...show,
-      episodes: cleanedEpisodes
+      episodes: []
     };
   });
 

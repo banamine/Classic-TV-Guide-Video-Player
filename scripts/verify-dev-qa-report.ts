@@ -98,8 +98,10 @@ async function runDevQaVerification() {
   // Q2.1 Test
   total++;
   let q2_1_passed = true;
-  const today = new Date('2026-07-26T00:00:00Z');
-  const tomorrow = new Date('2026-07-27T00:00:00Z');
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setUTCDate(today.getUTCDate() + 1);
 
   dbChannels.forEach(ch => {
     const offsetDayN = getDailyRotationOffset(ch.id, today);

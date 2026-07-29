@@ -569,3 +569,116 @@ export function parseMasterPlaylistM3U(text: string, filename: string = 'master_
     status: 'unchecked'
   };
 }
+
+export function parseJsonPlaylistData(jsonData: any, channelName: string = 'Custom Station'): { shows: Show[]; firstVideoUrl: string; extractedName?: string } {
+  if (!jsonData) {
+    throw new Error('Empty JSON data provided.');
+  }
+
+  let itemsList: any[] = [];
+  let nameFromHeader: string | undefined = undefined;
+
+  if (Array.isArray(jsonData)) {
+    itemsList = jsonData;
+  } else if (typeof jsonData === 'object') {
+    if (jsonData.name || jsonData.title) {
+      nameFromHeader = jsonData.name || jsonData.title;
+    }
+    if (Array.isArray(jsonData.items)) {
+      itemsList = jsonData.items;
+    } else if (Array.isArray(jsonData.playlist)) {
+      itemsList = jsonData.playlist;
+    } else if (Array.isArray(jsonData.episodes)) {
+      itemsList = jsonData.episodes;
+    } else if (Array.isArray(jsonData.shows)) {
+      itemsList = jsonData.shows;
+    } else if (Array.isArray(jsonData.files)) {
+      // Archive.org metadata files
+      itemsList = jsonData.files.filter((f: any) => {
+        const fmt = (f.format || '').toLowerCase();
+        const name = (f.name || '').toLowerCase();
+        return fmt.includes('mp4') || fmt.includes('mpeg') || fmt.includes('h.264') || name.endsWith('.mp4') || name.endsWith('.m4v') || name.endsWith('.m3u8');
+      });
+    } else if (jsonData.channels) {
+      // Master playlist format
+      itemsList = [];
+      Object.entries(jsonData.channels).forEach(([k, chData]: [string, any]) => {
+        if (chData.playlist) {
+          itemsList.push(...chData.playlist.map((p: any) => ({ ...p, series: chData.name || k })));
+        }
+      });
+    }
+  }
+
+  if (itemsList.length === 0) {
+    throw new Error('No valid video playlist items found in JSON structure.');
+  }
+
+  const showsMap: Record<string, Episode[]> = {};
+
+  itemsList.forEach((item, idx) => {
+    const rawUrl = item.url || item.m4vUrl || item.fallbackUrl || item.src || item.link || item.file || item.streamUrl || item.stream;
+    if (!rawUrl) return;
+
+    let videoUrl = rawUrl;
+    if (!videoUrl.startsWith('http://') && !videoUrl.startsWith('https://')) {
+      if (jsonData.server && jsonData.dir) {
+        videoUrl = `https://${jsonData.server}${jsonData.dir}/${videoUrl}`;
+      }
+    }
+
+    const title = item.title || item.name || item.cleanTitle || item.filename || `Segment #${idx + 1}`;
+    const seriesName = item.series || item.show || item.showTitle || item.group || nameFromHeader || channelName || 'Custom Broadcast';
+    const durationSec = item.durationSec || item.duration || (item.durationMs ? item.durationMs / 1000 : 1800);
+    const durationMs = durationSec * 1000;
+
+    const episode: Episode = {
+      id: `ep-json-${Math.random().toString(36).substring(2, 9)}`,
+      title,
+      url: videoUrl,
+      season: String(item.season || '1'),
+      episodeNumber: String(item.episodeNumber || idx + 1),
+      runtimeMins: Math.ceil(durationSec / 60),
+      durationMs,
+      funFact: `JSON Playlist Stream • Duration: ${durationSec}s`
+    };
+
+    if (!showsMap[seriesName]) {
+      showsMap[seriesName] = [];
+    }
+    showsMap[seriesName].push(episode);
+  });
+
+  const shows: Show[] = Object.entries(showsMap).map(([title, episodes]) => ({
+    id: `show-json-${Math.random().toString(36).substring(2, 9)}`,
+    title,
+    description: `Custom JSON playlist show containing ${episodes.length} programmed segments.`,
+    year: new Date().getFullYear().toString(),
+    genre: 'Custom Feed',
+    episodes
+  }));
+
+  const firstVideoUrl = shows[0]?.episodes[0]?.url || '';
+
+  return {
+    shows,
+    firstVideoUrl,
+    extractedName: nameFromHeader
+  };
+}
+
+export async function fetchAndParseJsonPlaylist(url: string, channelName: string = 'Custom Station') {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch JSON playlist (${res.status} ${res.statusText})`);
+  }
+  const text = await res.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch (err: any) {
+    throw new Error(`Failed to parse JSON content from URL: ${err.message}`);
+  }
+  return parseJsonPlaylistData(json, channelName);
+}
+

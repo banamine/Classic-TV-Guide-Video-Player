@@ -6,7 +6,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 import { PlaybackLog, Episode, Show, SubtitleCue } from '../types';
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Volume1, AlertCircle, RefreshCw, Radio, HardDriveDownload, PictureInPicture, Info, X, Sparkles, Clock, Database, User, Subtitles } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Volume1, AlertCircle, RefreshCw, Radio, HardDriveDownload, PictureInPicture, Info, X, Sparkles, Clock, Database, User, Subtitles, Edit3 } from 'lucide-react';
 import { getCachedSegment, saveCachedSegment, getNearestCachedSegment, evictStaleSegments, isStale } from '../utils/segmentCache';
 
 function parseSubtitles(content: string): SubtitleCue[] {
@@ -80,6 +80,7 @@ interface CustomVideoPlayerProps {
   schedulingMode?: 'hard-clocked' | 'continuous';
   onDurationProbed?: (durationMs: number) => void;
   nextEpisode?: Episode;
+  onEditChannel?: () => void;
 }
 
 const getBackupUrls = (url: string, channelId: string): string[] => {
@@ -161,6 +162,7 @@ export function CustomVideoPlayer({
   schedulingMode = 'hard-clocked',
   onDurationProbed,
   nextEpisode,
+  onEditChannel,
 }: CustomVideoPlayerProps) {
   const [activePlayer, setActivePlayer] = useState<'A' | 'B'>('A');
   const videoRefA = useRef<HTMLVideoElement>(null);
@@ -184,6 +186,7 @@ export function CustomVideoPlayer({
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const stallTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const idleHlsRef = useRef<Hls | null>(null);
 
   const schedulingModeRef = useRef(schedulingMode);
   useEffect(() => {
@@ -721,6 +724,19 @@ export function CustomVideoPlayer({
           idleVid.play().catch(() => {});
         });
 
+        // Swap active and idle HLS instances cleanly
+        const tempHls = hlsRef.current;
+        hlsRef.current = idleHlsRef.current;
+        idleHlsRef.current = tempHls;
+
+        if (idleHlsRef.current) {
+          try {
+            idleHlsRef.current.detachMedia();
+            idleHlsRef.current.destroy();
+          } catch (e) {}
+          idleHlsRef.current = null;
+        }
+
         setActivePlayer(prev => (prev === 'A' ? 'B' : 'A'));
 
         if (currentVid) {
@@ -807,11 +823,39 @@ export function CustomVideoPlayer({
               isIdleReadyRef.current = false;
               onLogEventRef.current('custom', `[Dual-Player Engine]: Pre-arming idle player (${activePlayer === 'A' ? 'Player B' : 'Player A'}) with upcoming segment stream: ${targetNextUrl}`);
 
-              idleVid.src = targetNextUrl;
-              idleVid.volume = volume;
-              idleVid.muted = isMuted;
-              idleVid.preload = 'auto';
-              idleVid.load();
+              if (idleHlsRef.current) {
+                try {
+                  idleHlsRef.current.detachMedia();
+                  idleHlsRef.current.destroy();
+                } catch (e) {}
+                idleHlsRef.current = null;
+              }
+
+              const isTargetHls = targetNextUrl.includes('.m3u8') || targetNextUrl.includes('m3u8');
+              if (isTargetHls && Hls.isSupported()) {
+                const hls = new Hls({
+                  enableWorker: true,
+                  lowLatencyMode: true,
+                  backBufferLength: 60,
+                });
+                hls.loadSource(targetNextUrl);
+                hls.attachMedia(idleVid);
+                idleHlsRef.current = hls;
+              } else if (isTargetHls && idleVid.canPlayType('application/vnd.apple.mpegurl')) {
+                idleVid.src = targetNextUrl;
+                idleVid.volume = volume;
+                idleVid.muted = isMuted;
+                idleVid.preload = 'auto';
+                idleVid.load();
+              } else {
+                idleVid.removeAttribute('src');
+                idleVid.load();
+                idleVid.src = targetNextUrl;
+                idleVid.volume = volume;
+                idleVid.muted = isMuted;
+                idleVid.preload = 'auto';
+                idleVid.load();
+              }
 
               const onIdleCanPlay = () => {
                 isIdleReadyRef.current = true;
@@ -1017,6 +1061,40 @@ export function CustomVideoPlayer({
         }
       }
 
+      // Automatically resolve stream URL if URL points to a .json file or playlist
+      if (sanitizedUrl.toLowerCase().includes('.json')) {
+        onLogEventRef.current('custom', `[JSON Playlist Stream Resolver]: Resolving stream video URL from playlist JSON: ${sanitizedUrl}...`);
+        fetch(sanitizedUrl)
+          .then((res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+          })
+          .then((data) => {
+            let streamUrl = '';
+            if (Array.isArray(data)) {
+              streamUrl = data[0]?.url || data[0]?.m4vUrl || data[0]?.fallbackUrl || data[0]?.src || data[0]?.link || '';
+            } else if (data && typeof data === 'object') {
+              const list = data.items || data.playlist || data.episodes || data.shows || [];
+              if (list[0]) {
+                streamUrl = list[0].url || list[0].m4vUrl || list[0].fallbackUrl || list[0].src || list[0].link || '';
+              }
+            }
+            if (streamUrl) {
+              onLogEventRef.current('custom', `[JSON Playlist Stream Resolver]: Successfully resolved direct stream URL: ${streamUrl}`);
+              initializeVideoSource(streamUrl, videoElement);
+            } else {
+              onLogEventRef.current('warning', `[JSON Playlist Stream Resolver]: No valid stream URL found in JSON playlist. Triggering failover...`);
+              triggerFallbackRef.current();
+            }
+          })
+          .catch((err) => {
+            console.warn('[JSON Playlist Stream Resolver] Failed to fetch or parse JSON URL:', err);
+            onLogEventRef.current('warning', `[JSON Playlist Stream Resolver]: Failed to parse JSON playlist. Triggering failover stream...`);
+            triggerFallbackRef.current();
+          });
+        return;
+      }
+
       if ((window as any).currentHlsInstance) {
         try {
           (window as any).currentHlsInstance.detachMedia();
@@ -1185,6 +1263,13 @@ export function CustomVideoPlayer({
           hlsRef.current.destroy();
         } catch (e) {}
         hlsRef.current = null;
+      }
+      if (idleHlsRef.current) {
+        try {
+          idleHlsRef.current.detachMedia();
+          idleHlsRef.current.destroy();
+        } catch (e) {}
+        idleHlsRef.current = null;
       }
     };
   }, [currentSourceUrl, episode.id]);
@@ -1525,8 +1610,24 @@ export function CustomVideoPlayer({
             </p>
           </div>
         </div>
-        <div className="text-right text-[10px] font-mono text-[#8c5cd0] bg-black/50 px-2.5 py-1 border border-white/5 rounded uppercase tracking-wider">
-          {channelName}
+        <div className="flex items-center gap-2">
+          {onEditChannel && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditChannel();
+              }}
+              className="px-2.5 py-1 text-[10px] font-mono text-purple-300 bg-purple-950/60 hover:bg-purple-900 border border-purple-500/40 rounded flex items-center gap-1.5 transition-all cursor-pointer pointer-events-auto"
+              title="Edit Station Titles & Stream URL"
+            >
+              <Edit3 className="w-3 h-3 text-purple-400" />
+              <span>EDIT STATION</span>
+            </button>
+          )}
+          <div className="text-right text-[10px] font-mono text-[#8c5cd0] bg-black/50 px-2.5 py-1 border border-white/5 rounded uppercase tracking-wider">
+            {channelName}
+          </div>
         </div>
       </div>
 

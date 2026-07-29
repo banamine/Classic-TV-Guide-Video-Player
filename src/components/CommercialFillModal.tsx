@@ -77,21 +77,21 @@ export function CommercialFillModal({ isOpen, onClose, onLogEvent, onRefreshSche
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto">
       <div className="relative w-full max-w-4xl bg-[#111111] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col my-8">
         {/* Header */}
-        <div className="p-5 border-b border-white/10 bg-gradient-to-r from-purple-950/40 via-[#161618] to-amber-950/30 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+        <div className="p-4 sm:p-5 border-b border-white/10 bg-gradient-to-r from-purple-950/40 via-[#161618] to-amber-950/30 flex items-center justify-between gap-3 min-w-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
               <Tv className="w-5 h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-white tracking-wide">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-sm sm:text-base font-bold text-white tracking-wide truncate">
                   Commercial & Interstitial Filler Engine
                 </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase shrink-0">
                   ACTIVE • 30M GRID SYNC
                 </span>
               </div>
-              <p className="text-xs text-white/50 mt-0.5">
+              <p className="text-xs text-white/50 mt-0.5 break-words">
                 Automated grid alignment algorithm plugging commercial breaks into dead air gaps.
               </p>
             </div>
@@ -99,7 +99,7 @@ export function CommercialFillModal({ isOpen, onClose, onLogEvent, onRefreshSche
 
           <button
             onClick={onClose}
-            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
@@ -164,7 +164,7 @@ export function CommercialFillModal({ isOpen, onClose, onLogEvent, onRefreshSche
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {[1, 2, 3, 4, 5, 8, 10].map((mins) => (
                 <button
                   key={mins}
