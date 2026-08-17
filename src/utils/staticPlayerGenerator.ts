@@ -591,16 +591,7 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       updateEPGAndSchedule();
       renderChannels();
 
-      // Show beautiful branding layer loader while buffering/autoplay resolves
-      if (!hasInteracted) {
-        const splash = document.getElementById('player-splash');
-        if (splash) {
-          splash.style.display = 'flex';
-          splash.style.zIndex = '25';
-          splash.style.opacity = '1';
-          splash.style.pointerEvents = 'auto';
-        }
-      } else {
+      if (hasInteracted) {
         const splash = document.getElementById('player-splash');
         if (splash) {
           splash.style.opacity = '0';
@@ -610,9 +601,8 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
             splash.style.display = 'none';
           }, 500);
         }
+        startActiveStream();
       }
-
-      startActiveStream();
     }
 
     function updateEPGAndSchedule() {
@@ -1111,7 +1101,22 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       renderChannels();
       
       if (CHANNELS.length > 0) {
-        selectChannel(CHANNELS[0]);
+        activeChannel = CHANNELS[0];
+        
+        // Update glow backdrops
+        const glowBackdrop = document.getElementById('ambient-backdrop-glow');
+        if (glowBackdrop) {
+          const color = activeChannel.accentColor || '#8c5cd0';
+          glowBackdrop.style.background = \`radial-gradient(circle at 50% 50%, \${color} 0%, transparent 70%)\`;
+        }
+        
+        // Update splash fields & HUD
+        const splashChanName = document.getElementById('splash-channel-name');
+        if (splashChanName) splashChanName.innerText = activeChannel.name;
+        const hudChanName = document.getElementById('hud-channel-name');
+        if (hudChanName) hudChanName.innerText = activeChannel.name;
+        
+        updateEPGAndSchedule();
       } else {
         console.error("No channels available to tune.");
       }
@@ -1119,7 +1124,7 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       // Synchronize schedule, layout, and rollover states every 5 seconds
       setInterval(() => {
         updateEPGAndSchedule();
-        if (activeChannel) {
+        if (activeChannel && hasInteracted) {
           const now = Date.now();
           const liveInfo = getLiveEpisodeForChannel(activeChannel, now);
           if (liveInfo && liveInfo.episode && liveInfo.episode.id !== currentlyPlayingEpisodeId) {
