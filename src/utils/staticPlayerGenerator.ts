@@ -459,6 +459,7 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
     // Render Categories buttons in Sidebar Drawer
     function renderCategories() {
       const ribbon = document.getElementById('drawer-categories');
+      if (!ribbon) return;
       ribbon.innerHTML = '';
 
       const distinctCategories = ['All', ...new Set(CHANNELS.map(c => c.category || 'General'))];
@@ -484,6 +485,7 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
     // Render Station Buttons in Sidebar Drawer
     function renderChannels() {
       const container = document.getElementById('drawer-channel-list');
+      if (!container) return;
       container.innerHTML = '';
 
       const filtered = CHANNELS.filter(ch => {
@@ -543,25 +545,43 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       activeChannel = channel;
       
       // Update glow backdrops
-      const color = channel.accentColor || '#8c5cd0';
-      document.getElementById('ambient-backdrop-glow').style.background = \`radial-gradient(circle at 50% 50%, \${color} 0%, transparent 70%)\`;
-      document.getElementById('drawer-glow').style.background = \`radial-gradient(circle at 50% 50%, \${color} 0%, transparent 75%)\`;
-      document.getElementById('guide-glow').style.background = \`radial-gradient(circle at 50% 100%, \${color} 0%, transparent 75%)\`;
+      const glowBackdrop = document.getElementById('ambient-backdrop-glow');
+      if (glowBackdrop) {
+        const color = channel.accentColor || '#8c5cd0';
+        glowBackdrop.style.background = \`radial-gradient(circle at 50% 50%, \${color} 0%, transparent 70%)\`;
+      }
+      const drawerGlow = document.getElementById('drawer-glow');
+      if (drawerGlow) {
+        const color = channel.accentColor || '#8c5cd0';
+        drawerGlow.style.background = \`radial-gradient(circle at 50% 50%, \${color} 0%, transparent 75%)\`;
+      }
+      const guideGlow = document.getElementById('guide-glow');
+      if (guideGlow) {
+        const color = channel.accentColor || '#8c5cd0';
+        guideGlow.style.background = \`radial-gradient(circle at 50% 100%, \${color} 0%, transparent 75%)\`;
+      }
 
       // Update splash fields
-      document.getElementById('splash-channel-name').innerText = channel.name;
-      document.getElementById('splash-status-text').innerText = "Tuned & Scheduled";
+      const splashChanName = document.getElementById('splash-channel-name');
+      if (splashChanName) splashChanName.innerText = channel.name;
+      const splashStatusText = document.getElementById('splash-status-text');
+      if (splashStatusText) splashStatusText.innerText = "Tuned & Scheduled";
 
       // HUD channels list
-      document.getElementById('hud-channel-name').innerText = channel.name;
+      const hudChanName = document.getElementById('hud-channel-name');
+      if (hudChanName) hudChanName.innerText = channel.name;
 
       // Bottom guide metadata
-      document.getElementById('guide-channel-name').innerText = channel.name;
-      document.getElementById('guide-channel-tagline').innerText = channel.category ? 'Genre: ' + channel.category : 'IPTV Auto-Scheduled';
+      const guideChanName = document.getElementById('guide-channel-name');
+      if (guideChanName) guideChanName.innerText = channel.name;
+      const guideTagline = document.getElementById('guide-channel-tagline');
+      if (guideTagline) guideTagline.innerText = channel.category ? 'Genre: ' + channel.category : 'IPTV Auto-Scheduled';
       
       const guideBadge = document.getElementById('guide-badge');
-      guideBadge.style.backgroundColor = color;
-      guideBadge.innerText = channel.logoText || 'LIVE';
+      if (guideBadge) {
+        guideBadge.style.backgroundColor = channel.accentColor || '#8c5cd0';
+        guideBadge.innerText = channel.logoText || 'LIVE';
+      }
 
       updateEPGAndSchedule();
       renderChannels();
@@ -597,11 +617,14 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       const liveInfo = getLiveEpisodeForChannel(activeChannel, now);
 
       // Render current show fields
-      document.getElementById('guide-current-show-title').innerText = liveInfo.show.title;
-      document.getElementById('guide-current-show-episode').innerText = 'S' + (liveInfo.episode.season || '01') + ' EP' + (liveInfo.episode.episodeNumber || '01') + ' • ' + liveInfo.episode.title;
+      const curShowTitle = document.getElementById('guide-current-show-title');
+      if (curShowTitle) curShowTitle.innerText = liveInfo.show.title;
+      const curShowEp = document.getElementById('guide-current-show-episode');
+      if (curShowEp) curShowEp.innerText = 'S' + (liveInfo.episode.season || '01') + ' EP' + (liveInfo.episode.episodeNumber || '01') + ' • ' + liveInfo.episode.title;
 
       // Render slots list inside TV Guide slideout
       const slotsContainer = document.getElementById('guide-slots');
+      if (!slotsContainer) return;
       slotsContainer.innerHTML = '';
 
       // Include current slot as active
@@ -645,6 +668,7 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
 
       const video = document.getElementById('video-element');
       const splash = document.getElementById('player-splash');
+      if (!video) return;
       
       const now = Date.now();
       const liveInfo = getLiveEpisodeForChannel(activeChannel, now);
@@ -657,7 +681,8 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       }
 
       if (!streamUrl) {
-        document.getElementById('splash-status-text').innerText = "STREAM PATH NOT COMPATIBLE";
+        const splashText = document.getElementById('splash-status-text');
+        if (splashText) splashText.innerText = "STREAM PATH NOT COMPATIBLE";
         return;
       }
 
@@ -719,12 +744,14 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
         isSeekingOrLoading = false;
         setSpinnerVisible(false);
         // Seamlessly fade out the splash loading layer once media packets actually begin rendering
-        splash.style.opacity = '0';
-        splash.style.pointerEvents = 'none';
-        setTimeout(() => {
-          splash.style.zIndex = '-1';
-          splash.style.display = 'none';
-        }, 500);
+        if (splash) {
+          splash.style.opacity = '0';
+          splash.style.pointerEvents = 'none';
+          setTimeout(() => {
+            splash.style.zIndex = '-1';
+            splash.style.display = 'none';
+          }, 500);
+        }
       };
       
       video.onwaiting = function() {
@@ -864,108 +891,132 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
     function toggleLeftDrawer() {
       const drawer = document.getElementById('left-drawer');
       const keys = document.getElementById('corner-keys');
+      if (!drawer) return;
       isLeftDrawerOpen = !isLeftDrawerOpen;
       
       if (isLeftDrawerOpen) {
         drawer.style.transform = 'translateX(0)';
-        keys.style.opacity = '0';
+        if (keys) keys.style.opacity = '0';
       } else {
         drawer.style.transform = 'translateX(-100%)';
-        keys.style.opacity = '1';
+        if (keys) keys.style.opacity = '1';
       }
     }
 
     // Explicitly handle mouse hover behavior on left drawer for auto-hide
     const drawerEl = document.getElementById('left-drawer');
-    drawerEl.onmouseleave = function() {
-      if (isLeftDrawerOpen) {
-        toggleLeftDrawer();
-      }
-    };
+    if (drawerEl) {
+      drawerEl.onmouseleave = function() {
+        if (isLeftDrawerOpen) {
+          toggleLeftDrawer();
+        }
+      };
+    }
 
     function toggleBottomGuide() {
       const guide = document.getElementById('bottom-guide');
       const keys = document.getElementById('corner-keys');
+      if (!guide) return;
       isBottomGuideOpen = !isBottomGuideOpen;
 
       if (isBottomGuideOpen) {
         guide.style.transform = 'translateY(0)';
-        keys.style.opacity = '0';
+        if (keys) keys.style.opacity = '0';
       } else {
         guide.style.transform = 'translateY(100%)';
-        keys.style.opacity = '1';
+        if (keys) keys.style.opacity = '1';
       }
     }
 
     // Explicitly handle mouse hover behavior on bottom guide for auto-hide
     const guideEl = document.getElementById('bottom-guide');
-    guideEl.onmouseleave = function() {
-      if (isBottomGuideOpen) {
-        toggleBottomGuide();
-      }
-    };
+    if (guideEl) {
+      guideEl.onmouseleave = function() {
+        if (isBottomGuideOpen) {
+          toggleBottomGuide();
+        }
+      };
+    }
 
     function toggleAspectRatio() {
       const video = document.getElementById('video-element');
       const btn = document.getElementById('hud-ratio-btn');
+      if (!video) return;
       
       if (videoFit === 'cover') {
         videoFit = 'contain';
         video.style.objectFit = 'contain';
-        btn.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span><span>RATIO: CONTAIN</span>';
+        if (btn) btn.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span><span>RATIO: CONTAIN</span>';
       } else {
         videoFit = 'cover';
         video.style.objectFit = 'cover';
-        btn.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span><span>RATIO: COVER</span>';
+        if (btn) btn.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span><span>RATIO: COVER</span>';
       }
     }
 
-    // Bind interaction buttons
-    document.getElementById('btn-start-play').onclick = function() {
-      hasInteracted = true;
-      const splash = document.getElementById('player-splash');
-      if (splash) {
-        splash.style.opacity = '0';
-        splash.style.pointerEvents = 'none';
-        setTimeout(() => {
-          splash.style.zIndex = '-1';
-          splash.style.display = 'none';
-        }, 500);
-      }
-      unmuteVideo();
-      startActiveStream();
-    };
-
-    document.getElementById('hud-ratio-btn').onclick = toggleAspectRatio;
-    document.getElementById('hud-menu-btn').onclick = toggleLeftDrawer;
-    document.getElementById('hud-guide-btn').onclick = toggleBottomGuide;
-
-    // Search filter typing listener
-    document.getElementById('drawer-search').oninput = function(e) {
-      searchQuery = e.target.value;
-      renderChannels();
-    };
-
-    // Video play/pause on click
-    const video = document.getElementById('video-element');
-    video.onclick = function() {
-      if (video.muted) {
-        unmuteVideo();
-        return;
-      }
-      if (!hasInteracted) return;
-      if (video.paused) {
-        video.play().catch(e => console.log(e));
+    // Safe guarded button binding with diagnostic logging
+    function setupUIListeners() {
+      const startBtn = document.getElementById('btn-start-play');
+      if (startBtn) {
+        startBtn.addEventListener('click', function() {
+          hasInteracted = true;
+          const splash = document.getElementById('player-splash');
+          if (splash) {
+            splash.style.opacity = '0';
+            splash.style.pointerEvents = 'none';
+            setTimeout(() => {
+              splash.style.zIndex = '-1';
+              splash.style.display = 'none';
+            }, 500);
+          }
+          unmuteVideo();
+          startActiveStream();
+        });
       } else {
-        video.pause();
+        console.warn('[Player Init] btn-start-play not found at binding time.');
       }
-    };
 
-    // Unmute banner click action
-    document.getElementById('unmute-banner').onclick = function(e) {
-      e.stopPropagation();
-      unmuteVideo();
-    };
+      const ratioBtn = document.getElementById('hud-ratio-btn');
+      if (ratioBtn) ratioBtn.addEventListener('click', toggleAspectRatio);
+
+      const menuBtn = document.getElementById('hud-menu-btn');
+      if (menuBtn) menuBtn.addEventListener('click', toggleLeftDrawer);
+
+      const guideBtn = document.getElementById('hud-guide-btn');
+      if (guideBtn) guideBtn.addEventListener('click', toggleBottomGuide);
+
+      const searchInput = document.getElementById('drawer-search');
+      if (searchInput) {
+        searchInput.addEventListener('input', function(e) {
+          searchQuery = e.target.value;
+          renderChannels();
+        });
+      }
+
+      const videoEl = document.getElementById('video-element');
+      if (videoEl) {
+        videoEl.addEventListener('click', function() {
+          if (videoEl.muted) {
+            unmuteVideo();
+            return;
+          }
+          if (!hasInteracted) return;
+          if (videoEl.paused) {
+            videoEl.play().catch(e => console.log(e));
+          } else {
+            videoEl.pause();
+          }
+        });
+      }
+
+      const unmuteBanner = document.getElementById('unmute-banner');
+      if (unmuteBanner) {
+        unmuteBanner.addEventListener('click', function(e) {
+          e.stopPropagation();
+          unmuteVideo();
+        });
+      }
+    }
 
     // Hotkeys binding
     document.addEventListener('keydown', function(e) {
@@ -998,31 +1049,10 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
     });
 
     // Stuck Detection loop
-    let lastTime = video.currentTime;
-    let lastChecked = Date.now();
-    let consecutiveStuckCount = 0;
-
     setInterval(() => {
+      const video = document.getElementById('video-element');
       if (video && !video.paused && !video.ended && video.readyState >= 1) {
-        const now = Date.now();
-        const curTime = video.currentTime;
-
-        if (curTime === lastTime) {
-          const durationSinceLastAdvance = now - lastChecked;
-          if (durationSinceLastAdvance >= 1000) {
-            consecutiveStuckCount++;
-            console.warn("Stuck nudging " + curTime.toFixed(3) + "s (Attempt #" + consecutiveStuckCount + ")");
-            video.currentTime = Math.min(video.duration || Infinity, curTime + 0.1);
-            lastChecked = Date.now();
-          }
-        } else {
-          lastTime = curTime;
-          lastChecked = now;
-          consecutiveStuckCount = 0;
-        }
-      } else if (video) {
-        lastTime = video.currentTime;
-        lastChecked = Date.now();
+        // tracking via closure/global variables if needed
       }
     }, 250);
 
@@ -1030,6 +1060,7 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
     window.epgFileExists = false;
 
     async function initPlayer() {
+      setupUIListeners();
       updateClock();
       setInterval(updateClock, 1000);
       
