@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { parseM3U } from '../src/utils/m3uParser';
 import { generateStaticPlayerHtml } from '../src/utils/staticPlayerGenerator';
-import { CHANNELS_DATA } from '../src/data/playlist';
+import { CHANNELS } from '../src/data/channels';
 import { writeDailyScheduleFiles } from '../src/engine/scheduleManifestGenerator';
 
 function run() {
@@ -20,7 +20,7 @@ function run() {
   const hlsSource = path.join(process.cwd(), 'public', 'hls.min.js');
   const hlsDest = path.join(distDir, 'hls.min.js');
 
-  let channels = CHANNELS_DATA;
+  let channels = CHANNELS;
   let dataSourceName = 'Pre-seeded TV Guides';
 
   try {
