@@ -88,7 +88,7 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
     #player-splash .splash-box {
       text-align: center;
       position: relative;
-      z-index: 20;
+      z-index: 30;
       padding: 2rem 1.5rem;
       border-radius: 1rem;
       max-width: 28rem;
@@ -112,7 +112,7 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       transition: all 0.2s ease;
       pointer-events: auto !important;
       position: relative;
-      z-index: 30;
+      z-index: 40;
     }
     #btn-start-play:hover {
       background-color: #a855f7;
@@ -958,13 +958,15 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       }
     }
 
-    // Safe guarded button binding with diagnostic logging and direct fallback click listener
+    // Safe guarded button binding with direct click execution handler
     function setupUIListeners() {
       const startBtn = document.getElementById('btn-start-play');
       if (startBtn) {
         const handleStartClick = function(e) {
-          e.preventDefault();
-          e.stopPropagation();
+          if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
           hasInteracted = true;
           const splash = document.getElementById('player-splash');
           if (splash) {
@@ -1056,14 +1058,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       }
     });
 
-    // Stuck Detection loop
-    setInterval(() => {
-      const video = document.getElementById('video-element');
-      if (video && !video.paused && !video.ended && video.readyState >= 1) {
-        // tracking via closure/global variables if needed
-      }
-    }, 250);
-
     // Bootstrap loading
     window.epgFileExists = false;
 
@@ -1099,113 +1093,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
         }
       } catch (err) {
         console.warn("Could not load dynamic EPG state file, falling back to embedded channels:", err);
-      }
-
-      // Load fresh news segments if available
-      try {
-        if (window.location.protocol !== 'file:') {
-          let newsData = null;
-          const newsPaths = ['fresh_news.json', 'news.json', '/fresh_news.json', '/news.json'];
-          for (const np of newsPaths) {
-            try {
-              const res = await fetch(np);
-              if (res.ok) {
-                newsData = await res.json();
-                console.log("Loaded fresh news from " + np, newsData);
-                break;
-              }
-            } catch (e) {}
-          }
-
-          if (newsData && Array.isArray(newsData.episodes)) {
-            // Group episodes by groupTitle
-            const groupedShows = {};
-            newsData.episodes.forEach(ep => {
-              const showTitle = ep.groupTitle || ep.tvgName || 'Special News';
-              const showId = showTitle.toLowerCase().replace(/[^a-z0-9]/g, '-');
-              if (!groupedShows[showId]) {
-                groupedShows[showId] = {
-                  id: showId,
-                  title: showTitle,
-                  description: ep.description || 'Recent news broadcast segment.',
-                  year: '2026',
-                  genre: 'News',
-                  episodes: []
-                };
-              }
-              groupedShows[showId].episodes.push({
-                id: ep.id,
-                title: ep.title,
-                season: String(ep.season || 1),
-                episodeNumber: String(ep.episode || 1),
-                url: ep.url,
-                subtitleUrl: ep.subtitleUrl,
-                funFact: ep.description || 'Live news coverage.'
-              });
-            });
-
-            // Map each grouped show to a dedicated Channel or merge them into existing News channels (e.g., ch-cnn, ch-fox)
-            Object.values(groupedShows).forEach(showObj => {
-              const showTitleUpper = showObj.title.toUpperCase();
-              let targetChannelId = '';
-              if (showTitleUpper.includes('CNN')) {
-                targetChannelId = 'ch-cnn';
-              } else if (showTitleUpper.includes('FOX') || showTitleUpper.includes('THE STORY WITH MARTHA')) {
-                targetChannelId = 'ch-fox';
-              } else if (showTitleUpper.includes('BAY AREA') || showTitleUpper.includes('KPIX') || showTitleUpper.includes('CBS')) {
-                targetChannelId = 'ch-cnn';
-              } else if (
-                showTitleUpper.includes('DEUTSCHE WELLE') || 
-                showTitleUpper.includes('DW NEWS') || 
-                showTitleUpper.startsWith('DW ') ||
-                showTitleUpper.startsWith('DW_') ||
-                showTitleUpper === 'DW'
-              ) {
-                targetChannelId = 'ch-dw';
-              } else if (showTitleUpper.includes('BBC')) {
-                targetChannelId = 'ch-bbc';
-              } else if (
-                showTitleUpper.startsWith('RT ') || 
-                showTitleUpper.startsWith('RT_') || 
-                showTitleUpper === 'RT' || 
-                showTitleUpper.includes('RUSSIA TODAY') || 
-                showTitleUpper.includes('SANCHEZ EFFECT') || 
-                showTitleUpper.includes('CROSSTALK')
-              ) {
-                targetChannelId = 'ch-rt';
-              }
-
-              if (targetChannelId) {
-                let existingChan = loadedChannels.find(ch => ch.id === targetChannelId);
-                if (existingChan) {
-                  existingChan.shows = [showObj];
-                } else {
-                  loadedChannels.push({
-                    id: targetChannelId,
-                    name: showObj.title,
-                    logoText: 'NEWS',
-                    accentColor: '#dc2626',
-                    category: 'News',
-                    url: showObj.episodes[0]?.url || '',
-                    shows: [showObj]
-                  });
-                }
-              } else {
-                loadedChannels.push({
-                  id: 'ch-' + showObj.id,
-                  name: showObj.title,
-                  logoText: 'NEWS',
-                  accentColor: '#3b82f6',
-                  category: 'News',
-                  url: showObj.episodes[0]?.url || '',
-                  shows: [showObj]
-                });
-              }
-            });
-          }
-        }
-      } catch (newsErr) {
-        console.warn("Could not fetch fresh news segments:", newsErr);
       }
 
       // Update CHANNELS array
