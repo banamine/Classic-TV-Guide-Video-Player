@@ -341,6 +341,7 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
     let selectedCategory = 'All';
     let searchQuery = '';
     let videoFit = 'contain'; // cover vs contain
+    let isInitializing = false;
     
     // Drawers states
     let isLeftDrawerOpen = false;
@@ -747,6 +748,7 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       video.onplaying = function() {
         isSeekingOrLoading = false;
         setSpinnerVisible(false);
+        isInitializing = false;
         // Seamlessly fade out the splash loading layer once media packets actually begin rendering
         if (splash) {
           splash.style.opacity = '0';
@@ -768,6 +770,7 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
 
       video.onerror = function() {
         isSeekingOrLoading = false;
+        isInitializing = false;
         console.error("Video element encountered a playback/load error for stream:", streamUrl);
         setSpinnerVisible(true, "RECONNECTING STREAM...", "Re-establishing connection to stream buffer...", false);
         // Retry connection after 2.5s backoff buffer pause instead of instantly skipping/failing
@@ -958,7 +961,7 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       }
     }
 
-    // Safe guarded button binding with direct click execution handler
+    // Safe guarded button binding with optimized state-transition guard
     function setupUIListeners() {
       const startBtn = document.getElementById('btn-start-play');
       if (startBtn) {
@@ -967,6 +970,9 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
             e.preventDefault();
             e.stopPropagation();
           }
+          if (isInitializing) return;
+          isInitializing = true;
+          
           hasInteracted = true;
           const splash = document.getElementById('player-splash');
           if (splash) {
