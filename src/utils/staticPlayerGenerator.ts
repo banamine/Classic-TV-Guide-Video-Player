@@ -325,11 +325,11 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
 
   <!-- DATA & LOGIC INTERACTIVE ENGINE -->
   <script>
-    // 1. EMBEDDED CHANNELS DATA (M3U PRO GENERATED)
-    const CHANNELS = ${safeChannels} || [];
+    // 1. COMPLETELY BAKED-IN STATIC CHANNELS PLAYLIST
+    const CHANNELS = ${safeChannels};
 
-    if (CHANNELS.length === 0) {
-      console.error("Broadcast Engine: No channel data available.");
+    if (!CHANNELS || CHANNELS.length === 0) {
+      console.error("Broadcast Engine: No baked-in channel data available.");
       const hudEl = document.getElementById('hud-channel-name');
       if (hudEl) hudEl.innerText = "DATA ERROR";
     }
@@ -340,10 +340,9 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
     let hasInteracted = false;
     let selectedCategory = 'All';
     let searchQuery = '';
-    let videoFit = 'contain'; // cover vs contain
+    let videoFit = 'contain';
     let isInitializing = false;
     
-    // Drawers states
     let isLeftDrawerOpen = false;
     let isBottomGuideOpen = false;
 
@@ -368,7 +367,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       showUnmuteOverlay(false);
     }
 
-    // 2. TIMELINE LOOP SCHEDULER
     function getLiveEpisodeForChannel(channel, timestampMs) {
       const playlistItems = [];
       if (channel.shows && channel.shows.length > 0) {
@@ -394,8 +392,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       }
 
       const totalLoopDurationMs = playlistItems.reduce((acc, item) => acc + item.durationMs, 0);
-
-      // Find where we are in the endless loop
       const positionInLoopMs = timestampMs % totalLoopDurationMs;
       
       let runningSumMs = 0;
@@ -425,7 +421,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
         endTimeMs: currentSlotEndTimeMs,
       };
 
-      // Generate upcoming schedule slots
       const upcomingSlots = [];
       let nextSlotStartTimeMs = currentSlotEndTimeMs;
       for (let i = 1; i <= 6; i++) {
@@ -452,7 +447,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       };
     }
 
-    // 3. MAIN WORKSPACE ENGINE
     function updateClock() {
       const clockString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       const clockEl = document.getElementById('guide-clock');
@@ -461,7 +455,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       }
     }
 
-    // Render Categories buttons in Sidebar Drawer
     function renderCategories() {
       const ribbon = document.getElementById('drawer-categories');
       if (!ribbon) return;
@@ -487,7 +480,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       });
     }
 
-    // Render Station Buttons in Sidebar Drawer
     function renderChannels() {
       const container = document.getElementById('drawer-channel-list');
       if (!container) return;
@@ -549,7 +541,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
     function selectChannel(channel) {
       activeChannel = channel;
       
-      // Update glow backdrops
       const glowBackdrop = document.getElementById('ambient-backdrop-glow');
       if (glowBackdrop) {
         const color = channel.accentColor || '#8c5cd0';
@@ -566,17 +557,14 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
         guideGlow.style.background = \`radial-gradient(circle at 50% 100%, \${color} 0%, transparent 75%)\`;
       }
 
-      // Update splash fields
       const splashChanName = document.getElementById('splash-channel-name');
       if (splashChanName) splashChanName.innerText = channel.name;
       const splashStatusText = document.getElementById('splash-status-text');
       if (splashStatusText) splashStatusText.innerText = "Tuned & Scheduled";
 
-      // HUD channels list
       const hudChanName = document.getElementById('hud-channel-name');
       if (hudChanName) hudChanName.innerText = channel.name;
 
-      // Bottom guide metadata
       const guideChanName = document.getElementById('guide-channel-name');
       if (guideChanName) guideChanName.innerText = channel.name;
       const guideTagline = document.getElementById('guide-channel-tagline');
@@ -611,18 +599,15 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       const now = Date.now();
       const liveInfo = getLiveEpisodeForChannel(activeChannel, now);
 
-      // Render current show fields
       const curShowTitle = document.getElementById('guide-current-show-title');
       if (curShowTitle) curShowTitle.innerText = liveInfo.show.title;
       const curShowEp = document.getElementById('guide-current-show-episode');
       if (curShowEp) curShowEp.innerText = 'S' + (liveInfo.episode.season || '01') + ' EP' + (liveInfo.episode.episodeNumber || '01') + ' • ' + liveInfo.episode.title;
 
-      // Render slots list inside TV Guide slideout
       const slotsContainer = document.getElementById('guide-slots');
       if (!slotsContainer) return;
       slotsContainer.innerHTML = '';
 
-      // Include current slot as active
       const activeSlot = liveInfo.currentSlot;
       const actDiv = document.createElement('div');
       actDiv.className = 'flex-1 min-w-[220px] max-w-[280px] p-3 rounded-lg border border-purple-500/40 bg-purple-950/20 flex flex-col justify-between shrink-0';
@@ -639,7 +624,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       \`;
       slotsContainer.appendChild(actDiv);
 
-      // Remaining upcoming slots
       liveInfo.upcomingSlots.forEach(slot => {
         const slotDiv = document.createElement('div');
         slotDiv.className = 'flex-1 min-w-[220px] max-w-[280px] p-3 rounded-lg border border-white/5 bg-[#111116]/40 hover:bg-[#1a1a24]/50 hover:border-white/10 flex flex-col justify-between shrink-0 transition-colors';
@@ -670,7 +654,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       currentlyPlayingEpisodeId = liveInfo.episode ? liveInfo.episode.id : null;
       let streamUrl = liveInfo.episode.url || activeChannel.url || '';
 
-      // Ensure the URL is properly formatted/encoded (e.g. spaces converted to %20)
       if (streamUrl && !streamUrl.includes('%') && streamUrl.includes(' ')) {
         streamUrl = encodeURI(streamUrl);
       }
@@ -691,7 +674,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
         return;
       }
 
-      // Clean up previous HLS instances
       if (currentHlsInstance) {
         currentHlsInstance.destroy();
         currentHlsInstance = null;
@@ -705,17 +687,13 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       video.onvolumechange = null;
       video.onended = null;
 
-      // Handle loading overlay status state
       setSpinnerVisible(true);
 
-      // Listen to volume changes so native unmuting syncs perfectly
       video.onvolumechange = function() {
         if (!video.muted && video.volume > 0) {
           showUnmuteOverlay(false);
         }
       };
-
-      let isSeekingOrLoading = false;
 
       video.onloadedmetadata = function() {
         video.onloadedmetadata = null;
@@ -734,12 +712,9 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
         }
       };
 
-      // Set up responsive state listeners
       video.onplaying = function() {
-        isSeekingOrLoading = false;
         setSpinnerVisible(false);
         isInitializing = false;
-        // Seamlessly fade out the splash loading layer once media packets actually begin rendering
         if (splash) {
           splash.style.opacity = '0';
           splash.style.pointerEvents = 'none';
@@ -759,11 +734,9 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       };
 
       video.onerror = function() {
-        isSeekingOrLoading = false;
         isInitializing = false;
         console.error("Video element encountered a playback/load error for stream:", streamUrl);
         setSpinnerVisible(true, "RECONNECTING STREAM...", "Re-establishing connection to stream buffer...", false);
-        // Retry connection after 2.5s backoff buffer pause instead of instantly skipping/failing
         setTimeout(() => {
           if (activeChannel) {
             startActiveStream();
@@ -772,7 +745,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       };
 
       video.onended = function() {
-        console.log("[Playback Engine] Episode ended naturally. Reloading active schedule segment.");
         startActiveStream();
       };
 
@@ -783,7 +755,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
             showUnmuteOverlay(false);
           })
           .catch(function(e) {
-            console.log("Autoplay policy blocked unmuted audio, trying muted fallback...", e);
             video.muted = true;
             showUnmuteOverlay(true);
             video.play()
@@ -811,7 +782,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
 
         hls.on(Hls.Events.ERROR, function(event, data) {
           if (data.fatal) {
-            console.warn("Fatal HLS error encountered:", data);
             switch(data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
                 if (data.details === 'manifestLoadError' || data.details === 'manifestLoadTimeOut') {
@@ -884,7 +854,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       }
     }
 
-    // Interactive toggles
     function toggleLeftDrawer() {
       const drawer = document.getElementById('left-drawer');
       const keys = document.getElementById('corner-keys');
@@ -900,7 +869,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       }
     }
 
-    // Explicitly handle mouse hover behavior on left drawer for auto-hide
     const drawerEl = document.getElementById('left-drawer');
     if (drawerEl) {
       drawerEl.onmouseleave = function() {
@@ -925,7 +893,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       }
     }
 
-    // Explicitly handle mouse hover behavior on bottom guide for auto-hide
     const guideEl = document.getElementById('bottom-guide');
     if (guideEl) {
       guideEl.onmouseleave = function() {
@@ -951,7 +918,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       }
     }
 
-    // Safe guarded button binding with optimized state-transition guard
     function setupUIListeners() {
       const startBtn = document.getElementById('btn-start-play');
       if (startBtn) {
@@ -982,8 +948,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
         };
         startBtn.addEventListener('click', handleStartClick);
         startBtn.onclick = handleStartClick;
-      } else {
-        console.warn('[Player Init] btn-start-play not found at binding time.');
       }
 
       const ratioBtn = document.getElementById('hud-ratio-btn');
@@ -1028,7 +992,6 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       }
     }
 
-    // Hotkeys binding
     document.addEventListener('keydown', function(e) {
       const key = e.key.toLowerCase();
       if (document.activeElement && document.activeElement.tagName === 'INPUT') {
@@ -1046,11 +1009,8 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       }
     });
 
-    // Browser Tab Sleep Throttling Safeguard
-    // Re-syncs player to wall-clock time instantly when tab regains focus
     document.addEventListener('visibilitychange', function() {
       if (document.visibilityState === 'visible') {
-        console.log('[Time Engine] Tab regained visibility. Re-synchronizing to absolute wall-clock (Date.now())...');
         if (activeChannel && hasInteracted) {
           updateEPGAndSchedule();
           startActiveStream();
@@ -1058,48 +1018,10 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       }
     });
 
-    // Bootstrap loading
-    window.epgFileExists = false;
-
-    async function initPlayer() {
+    function initPlayer() {
       setupUIListeners();
       updateClock();
       setInterval(updateClock, 1000);
-      
-      // Slice array to create a distinct copy so mutation of CHANNELS won't empty the default list
-      let loadedChannels = CHANNELS.slice();
-      try {
-        const epgPath = '${epgSavePath}';
-        var fetchUrl = epgPath;
-        if (window.location.protocol === 'blob:') {
-          fetchUrl = window.location.origin + '/' + epgPath;
-        }
-        
-        // Skip fetch on local file:// protocol to avoid browser SecurityExceptions / CORS blocks
-        if (window.location.protocol !== 'file:') {
-          const response = await fetch(fetchUrl);
-          if (response.ok) {
-            window.epgFileExists = true;
-            const remoteChannels = await response.json();
-            if (Array.isArray(remoteChannels) && remoteChannels.length > 0) {
-              loadedChannels = remoteChannels;
-              console.log("Successfully synchronized dynamic EPG state from " + epgPath, remoteChannels.length + " channels");
-            }
-          } else {
-            console.warn("Dynamic EPG state file " + epgPath + " not found. Falling back to embedded channels.");
-          }
-        } else {
-          console.log("Running from local file:// environment. Bypassing dynamic EPG fetch and using embedded channels directly.");
-        }
-      } catch (err) {
-        console.warn("Could not load dynamic EPG state file, falling back to embedded channels:", err);
-      }
-
-      // Update CHANNELS array
-      CHANNELS.length = 0;
-      loadedChannels.forEach(function(c) {
-        CHANNELS.push(c);
-      });
       
       renderCategories();
       renderChannels();
@@ -1107,32 +1029,26 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       if (CHANNELS.length > 0) {
         activeChannel = CHANNELS[0];
         
-        // Update glow backdrops
         const glowBackdrop = document.getElementById('ambient-backdrop-glow');
         if (glowBackdrop) {
           const color = activeChannel.accentColor || '#8c5cd0';
           glowBackdrop.style.background = \`radial-gradient(circle at 50% 50%, \${color} 0%, transparent 70%)\`;
         }
         
-        // Update splash fields & HUD
         const splashChanName = document.getElementById('splash-channel-name');
         if (splashChanName) splashChanName.innerText = activeChannel.name;
         const hudChanName = document.getElementById('hud-channel-name');
         if (hudChanName) hudChanName.innerText = activeChannel.name;
         
         updateEPGAndSchedule();
-      } else {
-        console.error("No channels available to tune.");
       }
 
-      // Synchronize schedule, layout, and rollover states every 5 seconds
       setInterval(() => {
         updateEPGAndSchedule();
         if (activeChannel && hasInteracted) {
           const now = Date.now();
           const liveInfo = getLiveEpisodeForChannel(activeChannel, now);
           if (liveInfo && liveInfo.episode && liveInfo.episode.id !== currentlyPlayingEpisodeId) {
-            console.log("[EPG Engine] Scheduled segment rolled over. Reloading stream.");
             startActiveStream();
           }
         }
