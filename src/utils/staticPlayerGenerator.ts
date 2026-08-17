@@ -98,21 +98,25 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
     }
     #btn-start-play {
       margin-top: 1.5rem;
-      padding: 0.625rem 1.5rem;
+      padding: 0.75rem 2rem;
       background-color: #9333ea;
       color: #ffffff;
-      font-size: 0.75rem;
+      font-size: 0.875rem;
       font-weight: 900;
       border-radius: 9999px;
       cursor: pointer;
       text-transform: uppercase;
       letter-spacing: 0.1em;
-      border: 1px solid rgba(168, 85, 247, 0.2);
-      box-shadow: 0 10px 15px -3px rgba(147, 51, 234, 0.3);
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      box-shadow: 0 10px 25px -3px rgba(147, 51, 234, 0.5);
       transition: all 0.2s ease;
+      pointer-events: auto !important;
+      position: relative;
+      z-index: 30;
     }
     #btn-start-play:hover {
       background-color: #a855f7;
+      transform: scale(1.02);
     }
     /* Hide scrollbar utility */
     .scrollbar-none::-webkit-scrollbar {
@@ -179,7 +183,7 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
     <div id="player-splash" class="absolute inset-0 bg-[#07070a]/95 backdrop-blur-md z-[25] flex flex-col items-center justify-center p-6 text-center transition-all duration-500">
       <div class="absolute inset-0 bg-gradient-to-tr from-purple-950/10 via-transparent to-transparent pointer-events-none opacity-40"></div>
       
-      <div class="splash-box text-center relative z-20 px-6 py-8 rounded-2xl max-w-md bg-[#111116] border border-white/5 shadow-2xl">
+      <div class="splash-box text-center relative z-30 px-6 py-8 rounded-2xl max-w-md bg-[#111116] border border-white/5 shadow-2xl">
         <div class="inline-flex items-center justify-center p-3.5 bg-black border border-purple-500/20 rounded-full mb-4 animate-bounce">
           <svg class="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"></path>
@@ -188,7 +192,7 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
         <h2 id="splash-channel-name" class="text-lg font-black tracking-tight text-white uppercase font-sans">CINEMA CHANNELS</h2>
         <p id="splash-status-text" class="text-[10px] text-purple-400 font-mono tracking-widest mt-1 uppercase">Broadcast engine waiting</p>
         
-        <button id="btn-start-play" class="mt-6 px-6 py-2.5 bg-purple-600 text-white text-xs font-black rounded-full hover:bg-purple-500 shadow-lg pointer-events-auto transition-transform active:scale-95 uppercase tracking-widest border border-purple-400/20">
+        <button id="btn-start-play" type="button" class="mt-6 px-6 py-2.5 bg-purple-600 text-white text-xs font-black rounded-full hover:bg-purple-500 shadow-lg pointer-events-auto transition-transform active:scale-95 uppercase tracking-widest border border-purple-400/25">
           Start Stream Loop
         </button>
       </div>
@@ -217,19 +221,19 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       </div>
 
       <!-- Aspect Ratio Button -->
-      <button id="hud-ratio-btn" class="px-3.5 py-2 bg-black/60 hover:bg-black/80 backdrop-blur-md text-white border border-white/10 text-[10px] font-mono rounded-full flex items-center gap-1.5 shadow-lg active:scale-95 transition-all cursor-pointer" title="Toggle Aspect Ratio: Cover (Full Screen) vs Contain (Letterbox)">
+      <button id="hud-ratio-btn" type="button" class="px-3.5 py-2 bg-black/60 hover:bg-black/80 backdrop-blur-md text-white border border-white/10 text-[10px] font-mono rounded-full flex items-center gap-1.5 shadow-lg active:scale-95 transition-all cursor-pointer" title="Toggle Aspect Ratio: Cover (Full Screen) vs Contain (Letterbox)">
         <span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
         <span>RATIO: CONTAIN</span>
       </button>
 
       <!-- Station Directory Drawer Toggle Button -->
-      <button id="hud-menu-btn" class="px-4 py-2 bg-[#121217] hover:bg-[#1a1a24] backdrop-blur-md text-white border border-white/10 text-[10px] font-black tracking-widest rounded-full flex items-center gap-2 shadow-lg active:scale-95 transition-all cursor-pointer">
+      <button id="hud-menu-btn" type="button" class="px-4 py-2 bg-[#121217] hover:bg-[#1a1a24] backdrop-blur-md text-white border border-white/10 text-[10px] font-black tracking-widest rounded-full flex items-center gap-2 shadow-lg active:scale-95 transition-all cursor-pointer">
         <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16M4 18h16"></path></svg>
         <span>CHANNELS</span>
       </button>
 
       <!-- EPG TV Guide Toggle Button -->
-      <button id="hud-guide-btn" class="px-4 py-2 bg-[#121217] hover:bg-[#1a1a24] backdrop-blur-md text-white border border-white/10 text-[10px] font-black tracking-widest rounded-full flex items-center gap-2 shadow-lg active:scale-95 transition-all cursor-pointer">
+      <button id="hud-guide-btn" type="button" class="px-4 py-2 bg-[#121217] hover:bg-[#1a1a24] backdrop-blur-md text-white border border-white/10 text-[10px] font-black tracking-widest rounded-full flex items-center gap-2 shadow-lg active:scale-95 transition-all cursor-pointer">
         <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
         <span>TV GUIDE</span>
       </button>
@@ -954,11 +958,13 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
       }
     }
 
-    // Safe guarded button binding with diagnostic logging
+    // Safe guarded button binding with diagnostic logging and direct fallback click listener
     function setupUIListeners() {
       const startBtn = document.getElementById('btn-start-play');
       if (startBtn) {
-        startBtn.addEventListener('click', function() {
+        const handleStartClick = function(e) {
+          e.preventDefault();
+          e.stopPropagation();
           hasInteracted = true;
           const splash = document.getElementById('player-splash');
           if (splash) {
@@ -971,7 +977,9 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
           }
           unmuteVideo();
           startActiveStream();
-        });
+        };
+        startBtn.addEventListener('click', handleStartClick);
+        startBtn.onclick = handleStartClick;
       } else {
         console.warn('[Player Init] btn-start-play not found at binding time.');
       }
