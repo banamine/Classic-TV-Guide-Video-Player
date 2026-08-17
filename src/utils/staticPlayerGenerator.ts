@@ -974,7 +974,11 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
             }, 500);
           }
           unmuteVideo();
-          startActiveStream();
+          if (activeChannel) {
+            startActiveStream();
+          } else if (CHANNELS.length > 0) {
+            selectChannel(CHANNELS[0]);
+          }
         };
         startBtn.addEventListener('click', handleStartClick);
         startBtn.onclick = handleStartClick;
@@ -1047,7 +1051,7 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
     document.addEventListener('visibilitychange', function() {
       if (document.visibilityState === 'visible') {
         console.log('[Time Engine] Tab regained visibility. Re-synchronizing to absolute wall-clock (Date.now())...');
-        if (activeChannel) {
+        if (activeChannel && hasInteracted) {
           updateEPGAndSchedule();
           startActiveStream();
         }
