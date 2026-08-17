@@ -13,7 +13,9 @@ import { Channel } from '../types';
  */
 export function generateStaticPlayerHtml(channels: Channel[], playlistName: string = "M3U Pro Auto-Scheduled Playlist", epgSavePath: string = "epg.json"): string {
   const channelsJson = JSON.stringify(channels, null, 2);
-  const safeChannels = channelsJson.replace(/</g, '\\u003c');
+  const safeChannels = channelsJson
+    .replace(/</g, '\\u003c')
+    .replace(/<\/script>/gi, '<\\/script>');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -48,7 +50,7 @@ export function generateStaticPlayerHtml(channels: Channel[], playlistName: stri
   </script>
   
   <!-- Google Fonts: Inter & JetBrains Mono with Swap support -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght=400;500;600;700;800;900&family=JetBrains+Mono:wght=400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 
   <style>
     body {
